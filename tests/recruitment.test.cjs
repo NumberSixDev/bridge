@@ -387,6 +387,11 @@ test('settings panel opens a modal, persists changes, toggles auto mode and reje
     await panelCommand.run();
     const message = h.channel.messagesById.get(h.service.settings.panelMessageId);
     assert.ok(message);
+    assert.ok(
+        panelCommand.result.replies[0].content.includes(
+            `https://discord.com/channels/${h.channel.guildId}/${h.channel.id}/${message.id}`
+        )
+    );
     const edit = fakeInteraction(h, { customId: 'recruitment:panel:edit', message });
     await edit.run();
     assert.equal(edit.result.shownModal.data.title, 'Recruitment minimums');
@@ -552,4 +557,29 @@ test('missing, private, stale, uncertain or malformed data always remains manual
         { coverageIssues: ['Wrong profile mode'] },
     ])
         assert.equal(evaluateEligibility(evidence(invalid), settings, NOW).eligible, false);
+});
+
+test('panel and new applications follow the invoking channel while old panel controls become inactive', async () => {
+    const h = makeService();
+    const other = new FakeChannel();
+    other.id = '99999999999999999';
+    h.service.resolveChannel = async (id) =>
+        [h.channel, other].find((channel) => channel.id === id);
+    await fakeInteraction(h, { type: 'command', subcommand: 'panel' }).run();
+    const oldMessage = h.channel.messagesById.get(h.service.settings.panelMessageId);
+    await fakeInteraction(h, { type: 'command', subcommand: 'panel', channelId: other.id }).run();
+    assert.equal(h.service.settings.panelChannelId, other.id);
+    assert.deepEqual(oldMessage.payload.components, []);
+    const newMessage = other.messagesById.get(h.service.settings.panelMessageId);
+    const edit = fakeInteraction(h, {
+        customId: 'recruitment:panel:edit',
+        channelId: other.id,
+        message: newMessage,
+    });
+    await edit.run();
+    assert.ok(edit.result.shownModal);
+    await h.service.handleJoinRequest('Applicant');
+    const application = h.store.snapshot().applications[0];
+    assert.equal(application.channelId, other.id);
+    assert.ok(other.messagesById.has(application.messageId));
 });

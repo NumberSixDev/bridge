@@ -47,6 +47,7 @@ interface RecruitmentServiceOptions {
     lookup?: LookupClient;
     now?: () => number;
     getChannel: () => TextChannel | undefined;
+    resolveChannel?: (id: string) => Promise<TextChannel | undefined>;
     isMinecraftReady: () => boolean;
     sendAcceptance: (username: string) => void;
 }
@@ -84,6 +85,7 @@ export default class RecruitmentService {
     private readonly lookup: LookupClient;
     private readonly now: () => number;
     private readonly getChannel: () => TextChannel | undefined;
+    private readonly resolveChannel: (id: string) => Promise<TextChannel | undefined>;
     private readonly isMinecraftReady: () => boolean;
     private readonly sendAcceptance: (username: string) => void;
     private state: RecruitmentState;
@@ -104,6 +106,12 @@ export default class RecruitmentService {
         this.lookup = options.lookup ?? new DragSimLookupClient();
         this.now = options.now ?? Date.now;
         this.getChannel = options.getChannel;
+        this.resolveChannel =
+            options.resolveChannel ??
+            (async (id) => {
+                const channel = this.getChannel();
+                return channel?.id === id ? channel : undefined;
+            });
         this.isMinecraftReady = options.isMinecraftReady;
         this.sendAcceptance = options.sendAcceptance;
         try {
@@ -256,10 +264,10 @@ export default class RecruitmentService {
         await interaction.deferReply({});
         const subcommand = interaction.options.getSubcommand();
         if (subcommand === 'panel') {
-            const panel = await this.syncPanel(true);
+            const panel = await this.syncPanel(true, interaction.channelId);
             await interaction.editReply({
                 content: panel
-                    ? 'The recruitment settings panel is available in the member channel.'
+                    ? `Open the [recruitment settings panel](https://discord.com/channels/${env.DISCORD_SERVER_ID}/${this.state.settings.panelChannelId}/${this.state.settings.panelMessageId}).`
                     : 'The settings panel could not be delivered yet; the saved settings remain unchanged.',
             });
             return;
@@ -301,13 +309,6 @@ export default class RecruitmentService {
     ) {
         if (!this.available) {
             await this.replyEphemeral(interaction, this.unavailableMessage());
-            return;
-        }
-        if (interaction.channelId !== env.MEMBER_CHANNEL_ID) {
-            await this.replyEphemeral(
-                interaction,
-                'This recruitment control only works in the member channel.'
-            );
             return;
         }
         if (interaction.isButton()) {
@@ -529,7 +530,10 @@ export default class RecruitmentService {
 
     private async handleButton(interaction: ButtonInteraction<'cached'>) {
         if (interaction.customId === PANEL_EDIT_ID) {
-            if (!this.validPanelMessage(interaction.message)) {
+            if (
+                !this.validPanelMessage(interaction.message) ||
+                interaction.channelId !== this.state.settings.panelChannelId
+            ) {
                 await this.replyEphemeral(interaction, 'This settings panel is no longer active.');
                 return;
             }
@@ -558,7 +562,10 @@ export default class RecruitmentService {
         if (
             [`${PANEL_AUTO_ID}:enable`, `${PANEL_AUTO_ID}:disable`].includes(interaction.customId)
         ) {
-            if (!this.validPanelMessage(interaction.message)) {
+            if (
+                !this.validPanelMessage(interaction.message) ||
+                interaction.channelId !== this.state.settings.panelChannelId
+            ) {
                 await this.replyEphemeral(interaction, 'This settings panel is no longer active.');
                 return;
             }
@@ -614,7 +621,11 @@ export default class RecruitmentService {
             await this.replyEphemeral(interaction, 'That recruitment form is not recognised.');
             return;
         }
-        if (!interaction.message || !this.validPanelMessage(interaction.message)) {
+        if (
+            !interaction.message ||
+            !this.validPanelMessage(interaction.message) ||
+            interaction.channelId !== this.state.settings.panelChannelId
+        ) {
             await this.replyEphemeral(interaction, 'This settings panel is no longer active.');
             return;
         }
@@ -635,7 +646,7 @@ export default class RecruitmentService {
     private validPanelMessage(message: Message) {
         return (
             message.id === this.state.settings.panelMessageId &&
-            message.channelId === env.MEMBER_CHANNEL_ID &&
+            message.channelId === this.state.settings.panelChannelId &&
             message.guildId === env.DISCORD_SERVER_ID
         );
     }
@@ -733,22 +744,27 @@ export default class RecruitmentService {
         };
     }
 
-    private syncPanel(createIfMissing: boolean): Promise<boolean> {
+    private syncPanel(createIfMissing: boolean, channelId?: string): Promise<boolean> {
         this.panelTail = this.panelTail
             .catch(() => false)
-            .then(() => this.syncPanelNow(createIfMissing));
+            .then(() => this.syncPanelNow(createIfMissing, channelId));
         return this.panelTail;
     }
 
-    private async syncPanelNow(createIfMissing: boolean) {
+    private async syncPanelNow(createIfMissing: boolean, channelId?: string) {
         if (this.stopped || !this.available) return false;
-        const channel = this.getChannel();
+        const targetChannelId =
+            channelId ?? this.state.settings.panelChannelId ?? env.MEMBER_CHANNEL_ID;
+        const channel = await this.resolveChannel(targetChannelId);
         if (
             !channel ||
-            channel.id !== env.MEMBER_CHANNEL_ID ||
+            channel.id !== targetChannelId ||
             channel.guildId !== env.DISCORD_SERVER_ID
-        )
-            return false;
+        ) {
+            throw new Error(
+                'Use this command in a text channel in this Discord server where the bot can view, send and embed messages.'
+            );
+        }
         const existingId = this.state.settings.panelMessageId;
         if (existingId && this.state.settings.panelChannelId === channel.id) {
             try {
@@ -765,12 +781,35 @@ export default class RecruitmentService {
             }
         }
         if (!createIfMissing) return false;
+        const previousPanelChannelId = this.state.settings.panelChannelId;
         const message = await channel.send(this.panelPayload());
         await this.exclusive(async () => {
             this.state.settings.panelMessageId = message.id;
             this.state.settings.panelChannelId = channel.id;
             await this.persist();
         });
+        if (existingId && previousPanelChannelId && previousPanelChannelId !== channel.id) {
+            try {
+                const oldChannel = await this.resolveChannel(previousPanelChannelId);
+                const oldMessage = await oldChannel?.messages.fetch(existingId);
+                await oldMessage?.edit({
+                    embeds: [
+                        new EmbedBuilder()
+                            .setColor('Grey')
+                            .setTitle('Recruitment panel moved')
+                            .setDescription(
+                                `Use the [current settings panel](https://discord.com/channels/${env.DISCORD_SERVER_ID}/${channel.id}/${message.id}).`
+                            ),
+                    ],
+                    components: [],
+                    allowedMentions: { parse: [] },
+                });
+            } catch {
+                winston.warn(
+                    'The old recruitment panel could not be marked as moved. Its controls are inactive.'
+                );
+            }
+        }
         return true;
     }
 
@@ -789,11 +828,19 @@ export default class RecruitmentService {
     private async deliverApplicationCardNow(id: string) {
         if (this.stopped || !this.available) return false;
         const application = this.application(id);
-        const channel = this.getChannel();
+        const targetChannelId =
+            application?.channelId ?? this.state.settings.panelChannelId ?? env.MEMBER_CHANNEL_ID;
+        let channel: TextChannel | undefined;
+        try {
+            channel = await this.resolveChannel(targetChannelId);
+        } catch {
+            this.scheduleDeliveryRetry(id);
+            return false;
+        }
         if (
             !application ||
             !channel ||
-            channel.id !== env.MEMBER_CHANNEL_ID ||
+            channel.id !== targetChannelId ||
             channel.guildId !== env.DISCORD_SERVER_ID
         ) {
             this.scheduleDeliveryRetry(id);

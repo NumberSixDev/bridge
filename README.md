@@ -93,7 +93,11 @@ already includes purse and is never increased a second time by the bridge.
 Automatic acceptance is disabled by default; manual applications are enabled. The two roles in
 `RECRUITMENT_ALLOWED_ROLE_IDS` can use `/recruitment panel`,
 `/recruitment requirements`, `/recruitment auto` and `/recruitment status`.
-Run `/recruitment panel` to post or refresh the settings embed in `MEMBER_CHANNEL_ID`.
+Run `/recruitment panel` in the text channel where you want recruitment managed.
+It posts the settings embed there and sends new application cards to that channel.
+Running it in another channel moves the panel and disables the old panel’s controls.
+Existing applications retain their original cards. Before a panel is created, applications
+use `MEMBER_CHANNEL_ID`. The command reply links directly to the panel.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
 The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto

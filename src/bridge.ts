@@ -1,4 +1,4 @@
-import { IntentsBitField } from 'discord.js';
+import { IntentsBitField, TextChannel } from 'discord.js';
 import winston from 'winston';
 import env from '@util/env';
 import Discord from '@discord/discord';
@@ -17,6 +17,18 @@ export default class Bridge {
     public readonly mineflayer = new Mineflayer();
     public readonly recruitment = new RecruitmentService({
         getChannel: () => this.discord.memberChannel,
+        resolveChannel: async (id) => {
+            const channel = await this.discord.channels.fetch(id);
+            if (
+                !(channel instanceof TextChannel) ||
+                channel.guildId !== env.DISCORD_SERVER_ID ||
+                !channel
+                    .permissionsFor(this.discord.user!)
+                    ?.has(['ViewChannel', 'SendMessages', 'EmbedLinks'])
+            )
+                return undefined;
+            return channel;
+        },
         isMinecraftReady: () => this.mineflayer.isReady,
         sendAcceptance: (username) => this.mineflayer.execute(`/g accept ${username}`),
     });
