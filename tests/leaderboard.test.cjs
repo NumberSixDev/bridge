@@ -394,7 +394,11 @@ test('player report uses shared tie ranking, API rank, 25-entry pages, and rejec
     assert.match(initial.embeds[0].data.description, /#2 \/ 27/);
     assert.doesNotMatch(initial.embeds[0].data.description, /\[MVP\+\] Member1/);
     assert.match(initial.embeds[0].data.footer.text, /Report page 1\/2/);
-    assert.equal((initial.embeds[0].data.description.match(/^\*\*\d+\./gm) || []).length, 25);
+    assert.equal(
+        (initial.embeds[0].data.description.match(/^\*\*(?:#\d+ \/ \d+|Unranked)\*\* · /gm) || [])
+            .length,
+        25
+    );
     const nextId = initial.components[0].components[2].data.custom_id;
     const buttonCalls = [];
     await service.handleInteraction({
@@ -469,10 +473,11 @@ test('player reports sort best positions first, unavailable last and capitalise 
     );
     const payload = service.reportPayload({ id: 'test', report }, 0);
     const description = payload.embeds[0].data.description;
-    assert.match(description, /1\.\*\* Purse/);
-    assert.match(description, /2\.\*\* RNG/);
-    assert.match(description, /3\.\*\* Networth/);
-    assert.match(description, /4\.\*\* Collections .*Unavailable/);
+    assert.match(description, /^\*\*#1 \/ 2\*\* · Purse/m);
+    assert.match(description, /^\*\*#1 \/ 2\*\* · RNG/m);
+    assert.match(description, /^\*\*#2 \/ 2\*\* · Networth/m);
+    assert.match(description, /^\*\*Unranked\*\* · Collections .*Unavailable/m);
+    assert.doesNotMatch(description, /^\*\*\d+\./m);
     service.stop();
 });
 

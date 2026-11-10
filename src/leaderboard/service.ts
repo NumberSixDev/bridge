@@ -1109,7 +1109,7 @@ export default class LeaderboardService {
             }.`,
             '',
             entries
-                .map((entry, index) => {
+                .map((entry) => {
                     const definition = descriptorMetric(entry.metric);
                     const category =
                         entry.metric.category === 'rng'
@@ -1119,18 +1119,15 @@ export default class LeaderboardService {
                     const value =
                         entry.value === undefined
                             ? 'Unavailable'
-                            : `${valueLabel(
-                                  entry.value,
-                                  definition,
-                                  entry.approximate === true
-                              )} — ${
-                                  entry.position === undefined || entry.rankedMembers === undefined
-                                      ? 'Unranked'
-                                      : `**#${entry.position} / ${entry.rankedMembers}**`
-                              }`;
-                    return `**${
-                        boundedPage * PAGE_SIZE + index + 1
-                    }.** ${category} · ${entry.metric.label.slice(0, 64)} — ${value}`;
+                            : valueLabel(entry.value, definition, entry.approximate === true);
+                    const position =
+                        entry.position === undefined || entry.rankedMembers === undefined
+                            ? 'Unranked'
+                            : `#${entry.position} / ${entry.rankedMembers}`;
+                    return `**${position}** · ${category} · ${entry.metric.label.slice(
+                        0,
+                        64
+                    )} — ${value}`;
                 })
                 .join('\n'),
         ].join('\n');
