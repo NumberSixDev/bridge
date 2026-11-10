@@ -19,6 +19,15 @@ export const envSchema = z
             .string()
             .regex(/^\/[a-zA-Z0-9_-]+(?: [a-zA-Z0-9_-]+)*$/)
             .default('/gc'),
+        MINECRAFT_JOIN_COMMAND: z
+            .union([
+                z
+                    .string()
+                    .regex(/^\/[a-zA-Z0-9_-]+(?: [a-zA-Z0-9_-]+)*$/)
+                    .max(256),
+                z.literal(''),
+            ])
+            .default(''),
         MINECRAFT_CHAT_SEPARATOR: z.string().trim().min(1).max(10).default('>'),
         USE_PROFANITY_FILTER: boolean.default(true),
         USE_FIRST_WORD_OF_AUTHOR_NAME: boolean.default(false),

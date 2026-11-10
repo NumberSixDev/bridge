@@ -6,6 +6,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 ## Behaviour
 
 -   Connects to `dragsim.co` using a Minecraft Java account and Microsoft sign-in.
+-   Acknowledges the server resource pack and uses `/warp hub` to leave the profile selector before enabling guild chat.
 -   Sends Discord messages as `/gc DisplayName > message`.
 -   Recognises guild messages such as `Guild > [DRAGON] LabGeek: .`, including unranked players.
 -   Everyone with access to the configured Discord channel can use the bridge.
@@ -52,6 +53,7 @@ Edit the local `.env` file:
 | `MINECRAFT_PORT`         | `25565`                                           |
 | `MINECRAFT_VERSION`      | `1.21.4`, or another confirmed compatible version |
 | `MINECRAFT_CHAT_COMMAND` | `/gc`                                             |
+| `MINECRAFT_JOIN_COMMAND` | `/warp hub` to leave DragSim's profile selector   |
 | `MINECRAFT_EMAIL`        | Microsoft account email for the bot               |
 | `DISCORD_TOKEN`          | Discord bot token                                 |
 | `DISCORD_SERVER_ID`      | The Discord server ID                             |

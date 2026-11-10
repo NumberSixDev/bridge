@@ -12,6 +12,7 @@ export default class Mineflayer {
     private stopping = false;
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
+    private joinTimer?: NodeJS.Timeout;
 
     constructor(private readonly createClient: typeof createBot = createBot) {}
 
@@ -57,6 +58,7 @@ export default class Mineflayer {
             this.bot = undefined;
             this.ready = false;
             clearInterval(this.reminderTimer);
+            clearTimeout(this.joinTimer);
             if (this.stopping || this.reconnectTimer) return;
             winston.warn(`Minecraft connection ended (${reason}); reconnecting in 15 seconds.`);
             this.reconnectTimer = setTimeout(() => {
@@ -80,6 +82,36 @@ export default class Mineflayer {
 
     private async onSpawn(bot: Bot, bridge: Bridge) {
         await loadEvents(path.join(__dirname, 'events/chat'), bot, bridge);
+        if (this.bot !== bot || this.stopping) return;
+        if (env.MINECRAFT_JOIN_COMMAND) {
+            // Let DragSim finish its initial profile-selector transfer first.
+            this.joinTimer = setTimeout(() => {
+                if (this.bot !== bot || this.stopping) return;
+                bot.once('spawn', () => {
+                    if (this.bot !== bot || this.stopping) return;
+                    clearTimeout(this.joinTimer);
+                    this.onReady(bot, bridge).catch((error: unknown) => {
+                        winston.error('Minecraft hub setup failed:', error);
+                        bridge.stop();
+                        process.exitCode = 1;
+                    });
+                });
+                this.joinTimer = setTimeout(() => {
+                    if (this.bot === bot && !this.stopping) bot.end('Hub transfer timed out');
+                }, 15_000);
+                try {
+                    bot.chat(env.MINECRAFT_JOIN_COMMAND);
+                } catch (error) {
+                    winston.error('Minecraft join command failed:', error);
+                    bot.end('Join command failed');
+                }
+            }, 2_000);
+            return;
+        }
+        await this.onReady(bot, bridge);
+    }
+
+    private async onReady(bot: Bot, bridge: Bridge) {
         if (this.bot !== bot || this.stopping) return;
         this.ready = true;
         winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
@@ -115,6 +147,7 @@ export default class Mineflayer {
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = undefined;
         clearInterval(this.reminderTimer);
+        clearTimeout(this.joinTimer);
         this.bot?.quit('Bridge stopped');
     }
 }

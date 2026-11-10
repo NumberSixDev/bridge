@@ -14,6 +14,7 @@ Object.assign(process.env, {
     MINECRAFT_HOST: 'dragsim.co',
     MINECRAFT_VERSION: '1.21.4',
     MINECRAFT_CHAT_COMMAND: '/gc',
+    MINECRAFT_JOIN_COMMAND: '',
     REMINDER_ENABLED: 'false',
     DISCORD_IGNORE_PREFIX: ')',
 });
@@ -207,6 +208,69 @@ test('configuration requires credentials and valid single-guild IDs and chat com
     assert.equal(envSchema.safeParse({ ...valid, DISCORD_TOKEN: '' }).success, false);
     assert.equal(envSchema.safeParse({ ...valid, MEMBER_CHANNEL_ID: 'bad-id' }).success, false);
     assert.equal(envSchema.safeParse({ ...valid, MINECRAFT_CHAT_COMMAND: 'gc' }).success, false);
+    assert.equal(
+        envSchema.safeParse({ ...valid, MINECRAFT_JOIN_COMMAND: '/warp hub\n/other' }).success,
+        false
+    );
+});
+
+test('guild chat waits for the configured hub transfer after the first spawn', async () => {
+    const { EventEmitter } = require('node:events');
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const originalJoinCommand = runtimeEnv.MINECRAFT_JOIN_COMMAND;
+    const originalSetTimeout = global.setTimeout;
+    const originalClearTimeout = global.clearTimeout;
+    let joinCallback;
+    let joinScheduled;
+    let ready;
+    let watchdogCleared = false;
+    const scheduled = new Promise((resolve) => {
+        joinScheduled = resolve;
+    });
+    const connected = new Promise((resolve) => {
+        ready = resolve;
+    });
+    global.setTimeout = (callback, delay, ...args) => {
+        if (delay === 2_000) {
+            joinCallback = callback;
+            joinScheduled();
+            return { joinDelay: true };
+        }
+        if (delay === 15_000) return { joinWatchdog: true };
+        return originalSetTimeout(callback, delay, ...args);
+    };
+    global.clearTimeout = (timer) => {
+        if (timer?.joinWatchdog) watchdogCleared = true;
+        else if (!timer?.joinDelay) originalClearTimeout(timer);
+    };
+    runtimeEnv.MINECRAFT_JOIN_COMMAND = '/warp hub';
+    const bot = new EventEmitter();
+    bot._client = new EventEmitter();
+    bot.username = 'LabGeek2';
+    bot.addChatPattern = () => {};
+    bot.quit = () => {};
+    const chats = [];
+    bot.chat = (text) => chats.push(text);
+    const mineflayer = new Mineflayer(() => bot);
+    try {
+        await mineflayer.connect({ discord: { send: async () => ready() }, stop() {} });
+        bot.emit('spawn');
+        await scheduled;
+        assert.throws(() => mineflayer.chat('too early'), /not connected yet/);
+        joinCallback();
+        assert.deepEqual(chats, ['/warp hub']);
+        assert.throws(() => mineflayer.chat('still transferring'), /not connected yet/);
+        bot.emit('spawn');
+        await connected;
+        assert.equal(watchdogCleared, true);
+        mineflayer.chat('ready');
+        assert.deepEqual(chats, ['/warp hub', '/gc ready']);
+    } finally {
+        mineflayer.stop();
+        runtimeEnv.MINECRAFT_JOIN_COMMAND = originalJoinCommand;
+        global.setTimeout = originalSetTimeout;
+        global.clearTimeout = originalClearTimeout;
+    }
 });
 
 test('resource pack replies preserve each UUID on the 1.21.4 wire before spawn', async () => {
