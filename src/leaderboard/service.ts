@@ -27,6 +27,8 @@ import {
     GuildRoster,
     LeaderboardCategory,
     LeaderboardDataset,
+    FreshPurgeEvidence,
+    LeaderboardPurgeSnapshot,
     LeaderboardLookupClient,
     LeaderboardSnapshot,
     MetricDefinition,
@@ -274,8 +276,32 @@ export default class LeaderboardService {
         this.networthInflight.clear();
     }
 
-    public getRoster() {
-        return this.roster.getRoster();
+    public getRoster(forceRefresh = false) {
+        return this.roster.getRoster(forceRefresh);
+    }
+
+    public async getPurgeSnapshot(forceRoster = false): Promise<LeaderboardPurgeSnapshot> {
+        const roster = await this.roster.getRoster(forceRoster);
+        const dataset = await this.ensureDataset(roster, true);
+        if (typeof dataset === 'string') throw new Error(dataset);
+        return {
+            roster: structuredClone(roster),
+            dataset: structuredClone(dataset),
+        };
+    }
+
+    public async lookupFreshPurgeEvidence(username: string): Promise<FreshPurgeEvidence> {
+        if (!isValidMinecraftUsername(username)) throw new Error('The player username is invalid.');
+        const profile = await this.lookup.getProfile(username);
+        if (profile.username.toLowerCase() !== username.toLowerCase())
+            throw new Error('The profile API returned a different player identity.');
+        const networth = await this.lookup.getNetworth(profile.username, profile.profileId);
+        if (
+            networth.username.toLowerCase() !== username.toLowerCase() ||
+            networth.profileId !== profile.profileId
+        )
+            throw new Error('The networth API returned a different player identity.');
+        return { profile, networth };
     }
 
     public async handleRefresh(interaction: ChatInputCommandInteraction) {

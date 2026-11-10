@@ -10,6 +10,7 @@ import {
     Message,
     ModalBuilder,
     ModalSubmitInteraction,
+    StringSelectMenuInteraction,
     TextChannel,
     TextInputBuilder,
     TextInputStyle,
@@ -42,7 +43,8 @@ const APPLICATION_PREFIX = 'recruitment:application:';
 type RecruitmentInteraction =
     | ChatInputCommandInteraction
     | ButtonInteraction<'cached'>
-    | ModalSubmitInteraction<'cached'>;
+    | ModalSubmitInteraction<'cached'>
+    | StringSelectMenuInteraction<'cached'>;
 
 interface RecruitmentServiceOptions {
     store?: RecruitmentStore;
@@ -307,7 +309,10 @@ export default class RecruitmentService {
     }
 
     public async handleInteraction(
-        interaction: ButtonInteraction<'cached'> | ModalSubmitInteraction<'cached'>
+        interaction:
+            | ButtonInteraction<'cached'>
+            | ModalSubmitInteraction<'cached'>
+            | StringSelectMenuInteraction<'cached'>
     ) {
         if (!this.available) {
             await this.replyEphemeral(interaction, this.unavailableMessage());
@@ -317,7 +322,14 @@ export default class RecruitmentService {
             await this.handleButton(interaction);
             return;
         }
-        await this.handleModal(interaction);
+        if (
+            typeof interaction.isStringSelectMenu === 'function' &&
+            interaction.isStringSelectMenu()
+        ) {
+            await this.replyEphemeral(interaction, 'That recruitment control is not recognised.');
+            return;
+        }
+        await this.handleModal(interaction as ModalSubmitInteraction<'cached'>);
     }
 
     public async setMinimums(networthInput: string, purseInput: string) {
@@ -1054,7 +1066,10 @@ export default class RecruitmentService {
     // This helper only normalises Discord's reply/edit response pair.
     // eslint-disable-next-line class-methods-use-this
     private async replyEphemeral(
-        interaction: ButtonInteraction<'cached'> | ModalSubmitInteraction<'cached'>,
+        interaction:
+            | ButtonInteraction<'cached'>
+            | ModalSubmitInteraction<'cached'>
+            | StringSelectMenuInteraction<'cached'>,
         content: string
     ) {
         if (interaction.replied || interaction.deferred) await interaction.editReply({ content });

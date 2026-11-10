@@ -62,6 +62,7 @@ export default class Mineflayer {
             this.bot = undefined;
             this.ready = false;
             bridge.leaderboard?.onMinecraftDisconnected();
+            bridge.purge?.onMinecraftDisconnected();
             clearInterval(this.reminderTimer);
             clearTimeout(this.joinTimer);
             if (this.stopping || this.reconnectTimer) return;
@@ -91,6 +92,7 @@ export default class Mineflayer {
         bot.on('messagestr', (message: string) =>
             bridge.leaderboard?.handleMinecraftMessage(message)
         );
+        bot.on('messagestr', (message: string) => bridge.purge?.handleMinecraftMessage(message));
         if (env.MINECRAFT_JOIN_COMMAND) {
             // Let DragSim finish its initial profile-selector transfer first.
             this.joinTimer = setTimeout(() => {
@@ -124,7 +126,8 @@ export default class Mineflayer {
         this.ready = true;
         winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
         await bridge.recruitment?.onMinecraftReady();
-        bridge.leaderboard?.onMinecraftReady();
+        await bridge.leaderboard?.onMinecraftReady();
+        await bridge.purge?.onMinecraftReady();
         await bridge.discord.send('The DragSim guild bridge is connected.');
         if (this.bot !== bot || this.stopping) return;
         if (env.REMINDER_ENABLED) {

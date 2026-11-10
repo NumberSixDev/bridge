@@ -56,6 +56,7 @@ export const envSchema = z
             .default('https://dragsim.co/api/'),
         RECRUITMENT_ALLOWED_ROLE_IDS: recruitmentRoleIds,
         RECRUITMENT_CHANNEL_ID: optionalSnowflake,
+        PURGE_ALLOW_PARTIAL_NETWORTH: boolean.default(false),
         // Retained for backwards-compatible configuration parsing only. It is no longer an
         // acceptance switch; recruitment owns every guild join decision.
         GUILD_AUTO_ACCEPT_ENABLED: boolean.default(false),

@@ -247,7 +247,8 @@ export class GuildRosterCollector {
         }
         clearTimeout(pending.timer);
         this.pending = undefined;
-        const roster = { members, observedAt: this.now() };
+        const guildMaster = pending.groups.get('Guild Master')?.members[0];
+        const roster = { members, guildMaster, observedAt: this.now() };
         this.cache = roster;
         winston.info(
             `Guild leaderboard roster verified: ${members.length} members across five ranks.`

@@ -136,6 +136,8 @@ export class DragSimLeaderboardClient implements LeaderboardLookupClient {
             throw new Error('The profile API did not return a matching selected main profile.');
         }
 
+        if (typeof selected.inventory_hidden !== 'boolean')
+            throw new Error('The profile API did not return a verified privacy status.');
         return {
             username,
             rank: stringValue(player?.rank)?.slice(0, 32),
@@ -193,7 +195,9 @@ export class DragSimLeaderboardClient implements LeaderboardLookupClient {
             total: hidden ? undefined : total,
             hidden,
             partial,
+            observedAt: timestamp(data.fetched_at) ?? this.now(),
             calculatedAt: timestamp(data.calculated_at),
+            marketObservedAt: timestamp(data.market_observed_at),
         };
     }
 

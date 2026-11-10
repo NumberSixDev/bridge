@@ -18,6 +18,7 @@ export type MetricUnit = 'amount' | 'xp' | 'kills' | 'count' | 'level' | 'score'
 
 export interface GuildRoster {
     guildName?: string;
+    guildMaster?: string;
     members: string[];
     observedAt: number;
 }
@@ -40,7 +41,19 @@ export interface NetworthSnapshot {
     total?: number;
     hidden: boolean;
     partial: boolean;
+    observedAt?: number;
     calculatedAt?: number;
+    marketObservedAt?: number;
+}
+
+export interface LeaderboardPurgeSnapshot {
+    roster: GuildRoster;
+    dataset: LeaderboardDataset;
+}
+
+export interface FreshPurgeEvidence {
+    profile: ProfileSnapshot;
+    networth: NetworthSnapshot;
 }
 
 export interface LeaderboardLookupClient {

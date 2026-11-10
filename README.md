@@ -20,6 +20,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Records guild join applications with profile summaries and persistent Accept/Deny controls.
 -   Supports a persistent recruitment settings panel with optional thresholded automatic acceptance.
 -   Provides public `/gleaderboard` rankings for current Minecraft guild members with paginated buttons.
+-   Provides an authorised `/purge` review panel for members below either recruitment minimum, with a separate confirmation and no action for unknown or unsafe data.
 
 The original Hypixel API lookups, Limbo commands, member-count polling, guild
 moderation commands and blacklist integration have been removed. There is no
@@ -50,21 +51,22 @@ pnpm setup-files
 
 Edit the local `.env` file:
 
-| Setting                        | Value                                                        |
-| ------------------------------ | ------------------------------------------------------------ |
-| `MINECRAFT_HOST`               | `dragsim.co`                                                 |
-| `MINECRAFT_PORT`               | `25565`                                                      |
-| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version            |
-| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                        |
-| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector              |
-| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                          |
-| `DISCORD_TOKEN`                | Discord bot token                                            |
-| `DISCORD_SERVER_ID`            | The Discord server ID                                        |
-| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                             |
-| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment          |
-| `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel |
-| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                |
-| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/`   |
+| Setting                        | Value                                                                     |
+| ------------------------------ | ------------------------------------------------------------------------- |
+| `MINECRAFT_HOST`               | `dragsim.co`                                                              |
+| `MINECRAFT_PORT`               | `25565`                                                                   |
+| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version                         |
+| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                                     |
+| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector                           |
+| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                                       |
+| `DISCORD_TOKEN`                | Discord bot token                                                         |
+| `DISCORD_SERVER_ID`            | The Discord server ID                                                     |
+| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                                          |
+| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment                       |
+| `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel              |
+| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                             |
+| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/`                |
+| `PURGE_ALLOW_PARTIAL_NETWORTH` | Allow explicitly labelled partial networth estimates; defaults to `false` |
 
 Keep credentials in `.env`. Microsoft tokens are stored locally in
 `.minecraft-auth/`. Both are ignored by Git. Do not copy personal authentication
@@ -163,6 +165,23 @@ served. The completed sanitized dataset is kept in the ignored
 `.bridge-data/leaderboard-cache.json` file with atomic writes and private file
 permissions so a restart preserves age without persisting inventories or
 credentials.
+
+## Guild purge
+
+`/purge` is available only to the same configured Admin and Guild Master roles
+as recruitment. It lists members below either saved recruitment minimum and
+keeps excluded usernames in `.bridge-data/purge.json` across restarts. Each row
+shows networth and purse with a check, cross or review marker. Missing, private,
+stale or incomplete evidence is review-only; set `PURGE_ALLOW_PARTIAL_NETWORTH=true`
+only when approximate valuations are acceptable for your policy.
+
+The bridge verifies a real `/g kick <player>` or `/guild kick <player>` entry
+from the server's help output before enabling the red Purge button. Purge first
+rechecks the roster and official main-profile evidence, then shows a frozen
+target list in a separate confirmation. No member is kicked by opening the
+panel or pressing Purge. Confirmation is bound to the authorised user and
+rechecks roles, settings, exclusions, membership and data before each paced
+command; a missing post-command roster confirmation stops the remaining job.
 
 ## Optional staff commands
 

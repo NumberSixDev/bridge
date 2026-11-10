@@ -21,7 +21,10 @@ export default {
         const isButton = typeof interaction.isButton === 'function' && interaction.isButton();
         const isModalSubmit =
             typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit();
-        if (isButton || isModalSubmit) {
+        const isStringSelectMenu =
+            typeof interaction.isStringSelectMenu === 'function' &&
+            interaction.isStringSelectMenu();
+        if (isButton || isModalSubmit || isStringSelectMenu) {
             if (isButton && bridge.leaderboard?.ownsInteraction(interaction)) {
                 try {
                     await bridge.leaderboard.handleInteraction(interaction);
@@ -37,6 +40,18 @@ export default {
                             content: 'There was an error while handling that leaderboard control.',
                             ephemeral: true,
                         });
+                }
+                return;
+            }
+            if ((isButton || isStringSelectMenu) && bridge.purge?.ownsInteraction(interaction)) {
+                try {
+                    await bridge.purge.handleInteraction(interaction);
+                } catch (error) {
+                    winston.error('Purge interaction failed:', error);
+                    const content = 'There was an error while handling that purge control.';
+                    if (interaction.replied || interaction.deferred)
+                        await interaction.editReply({ content });
+                    else await interaction.reply({ content, ephemeral: true });
                 }
                 return;
             }
