@@ -37,7 +37,11 @@ export default class Mineflayer {
             if (this.bot === bot) bot.end('connection error');
         });
         bot.on('kicked', (reason) => {
-            winston.warn('Minecraft disconnected the bot:', reason);
+            winston.warn(
+                `Minecraft disconnected the bot: ${
+                    typeof reason === 'string' ? reason : JSON.stringify(reason)
+                }`
+            );
         });
         bot.on('end', (reason) => {
             if (this.bot !== bot) return;
