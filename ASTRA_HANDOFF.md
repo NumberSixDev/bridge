@@ -1,6 +1,6 @@
 # Guild Bridge recruitment
 
-Updated 10 November 2026. Status: PUSHED and DEPLOYED; final genuine-application check pending.
+Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards and manual command observed.
 
 ## Target and authority
 
@@ -30,9 +30,9 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; final genuine-application
 ## Runtime and remaining verification
 
 -   Node22.22.3, pnpm11.1.2, Minecraft1.21.4 as LabGeek2; native LaunchAgent `com.numbersixdev.dragsim-guild-bridge` runs `dist/src/index.js`. PM2 unused. Credentials remain private in .env/.minecraft-auth; no second Minecraft login is allowed.
--   Runtime 113fc02 was pushed/deployed, with application channel and on-demand settings separated. The final deleted-panel recovery fix is included with this handoff. Deployment uses the built checkout on the feature branch.
+-   Runtime `cc9bbd25ca34929903190ec7f4e24c86306f6dae` is pushed/deployed, including separate application routing and deleted-panel recovery. The service was restarted and connected successfully.
 -   All four slash commands registered live; fresh supervised DragSim connection confirmed. Ben confirmed the final panel and Edit minimums form both work after channel routing was corrected.
 -   Application destination is pinned locally to 1569793036383162428. Bot View Channel, Send Messages, Embed Links and Read Message History permissions verified there. Panel location is independently chosen by the invoking slash-command channel. No panel is created on startup; deleted panels stay absent until requested.
--   Auto acceptance is off and thresholds unset. Prior accept-everyone mode is inert. Existing credentials/caches/startup/sleep configuration preserved.
--   Final genuine applicant/manual decision proof has been requested from Ben; no new recruitment admission is claimed yet. Offline tests cover both manual decisions and automatic qualification. Earlier accept-command permission was confirmed live before this replacement.
+-   Auto acceptance remains off. Ben exercised the form and saved 1 coin for both minimums; those user-selected values were preserved. Prior accept-everyone mode is inert. Existing credentials/caches/startup/sleep configuration preserved.
+-   Real application cards with purse/networth and active buttons were read back in the selected applications channel. The service observed an authorised manual acceptance button and sent its guild acceptance command; a final server-membership confirmation is pending from Ben. Offline tests cover manual Deny and automatic qualification; no automatic admission is claimed while the setting remains off.
 -   macOS CUA capture failed; UI confirmation comes from Ben, and Discord state comes from API readback.
