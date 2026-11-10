@@ -14,6 +14,7 @@ Object.assign(process.env, {
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
     PURGE_ALLOW_PARTIAL_NETWORTH: 'false',
+    PURGE_PROTECTED_USERNAMES: '',
 });
 
 const runtimeEnv = require('../dist/src/util/env.js').default;
@@ -570,5 +571,53 @@ test('purge denies missing role access and fails closed after an exclusion write
         assert.equal(h.kicks().length, 0);
     } finally {
         h.service.stop();
+    }
+});
+
+test('permanent exclusions are hidden case-insensitively and cannot be restored from the dropdown', async () => {
+    const previous = runtimeEnv.PURGE_PROTECTED_USERNAMES;
+    runtimeEnv.PURGE_PROTECTED_USERNAMES = ['low'];
+    const h = await harness();
+    try {
+        assert.doesNotMatch(h.command.payload.embeds[0].data.description, /\*\*Low\*\*/);
+        assert.ok(
+            !h.command.payload.components[0].components[0]
+                .toJSON()
+                .options.some((option) => option.value.toLowerCase() === 'low')
+        );
+        assert.equal(
+            buildPurgeRows(
+                { members: ['LOW'], observedAt: NOW },
+                dataset([]),
+                settings(),
+                [],
+                'Bot',
+                NOW
+            ).length,
+            0
+        );
+        const forged = await h.select(h.command.payload, 'Low');
+        assert.match(forged.calls.at(-1)[1].content, /visible/);
+        assert.equal(
+            evaluateFreshPurgeEvidence('LOW', evidence('LOW'), settings(), NOW).eligible,
+            false
+        );
+    } finally {
+        h.service.stop();
+        runtimeEnv.PURGE_PROTECTED_USERNAMES = previous;
+    }
+});
+
+test('permanent protection also blocks a player already present in a frozen confirmation', async () => {
+    const previous = runtimeEnv.PURGE_PROTECTED_USERNAMES;
+    const h = await harness();
+    try {
+        const prepared = await h.prepare();
+        runtimeEnv.PURGE_PROTECTED_USERNAMES = ['low'];
+        await h.click(prepared.payload, 'confirm');
+        assert.deepEqual(h.kicks(), ['/g kick Other']);
+    } finally {
+        h.service.stop();
+        runtimeEnv.PURGE_PROTECTED_USERNAMES = previous;
     }
 });

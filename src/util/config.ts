@@ -57,6 +57,22 @@ export const envSchema = z
         RECRUITMENT_ALLOWED_ROLE_IDS: recruitmentRoleIds,
         RECRUITMENT_CHANNEL_ID: optionalSnowflake,
         PURGE_ALLOW_PARTIAL_NETWORTH: boolean.default(false),
+        PURGE_PROTECTED_USERNAMES: z
+            .string()
+            .default('')
+            .transform((value) => [
+                ...new Set(
+                    value
+                        .split(',')
+                        .map((name) => name.trim().toLowerCase())
+                        .filter(Boolean)
+                ),
+            ])
+            .refine(
+                (names) =>
+                    names.length <= 500 && names.every((name) => /^[A-Za-z0-9_]{1,16}$/.test(name)),
+                'PURGE_PROTECTED_USERNAMES must contain valid comma-separated Minecraft usernames'
+            ),
         // Retained for backwards-compatible configuration parsing only. It is no longer an
         // acceptance switch; recruitment owns every guild join decision.
         GUILD_AUTO_ACCEPT_ENABLED: boolean.default(false),

@@ -141,6 +141,10 @@ function sameUsername(left: string | undefined, right: string | undefined) {
     return Boolean(left && right && left.toLowerCase() === right.toLowerCase());
 }
 
+function permanentlyExcluded(username: string) {
+    return env.PURGE_PROTECTED_USERNAMES.some((name) => sameUsername(name, username));
+}
+
 function ageIssue(label: string, value: number | undefined, now: number) {
     if (value === undefined || !Number.isFinite(value)) return `${label} timestamp is missing.`;
     if (value - now > MAX_FUTURE_SKEW_MS) return `${label} timestamp is from the future.`;
@@ -221,6 +225,7 @@ export function buildPurgeRows(
 
     const rows: PurgeRow[] = [];
     for (const username of roster.members) {
+        if (permanentlyExcluded(username)) continue;
         const record = recordFor(dataset, username);
         const networth = recordValue(dataset, username, 'networth');
         const purse = recordValue(dataset, username, 'purse');
@@ -282,6 +287,12 @@ export function evaluateFreshPurgeEvidence(
     settings: RecruitmentSettings,
     now: number
 ): PurgeFreshEvaluation {
+    if (permanentlyExcluded(username))
+        return {
+            eligible: false,
+            reviewOnly: false,
+            reason: 'This player is permanently excluded from purge.',
+        };
     if (!validSettings(settings)) {
         return {
             eligible: false,
@@ -847,6 +858,7 @@ export default class PurgeService {
             const current = currentNames.get(name.toLowerCase());
             return Boolean(
                 current &&
+                    !permanentlyExcluded(current) &&
                     !this.excluded.has(name.toLowerCase()) &&
                     !sameUsername(roster.guildMaster, current) &&
                     !sameUsername(this.getBotUsername(), current)
@@ -1064,6 +1076,7 @@ export default class PurgeService {
             const current = roster.members.find((name) => sameUsername(name, target.username));
             if (
                 !current ||
+                permanentlyExcluded(current) ||
                 sameUsername(roster.guildMaster, current) ||
                 sameUsername(this.getBotUsername(), current)
             ) {
@@ -1104,7 +1117,7 @@ export default class PurgeService {
                     'Authority, settings, exclusions or connection changed before sending a kick.';
                 break;
             }
-            if (!isValidMinecraftUsername(current)) {
+            if (!isValidMinecraftUsername(current) || permanentlyExcluded(current)) {
                 counts.skipped += 1;
                 continue;
             }

@@ -51,22 +51,23 @@ pnpm setup-files
 
 Edit the local `.env` file:
 
-| Setting                        | Value                                                                     |
-| ------------------------------ | ------------------------------------------------------------------------- |
-| `MINECRAFT_HOST`               | `dragsim.co`                                                              |
-| `MINECRAFT_PORT`               | `25565`                                                                   |
-| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version                         |
-| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                                     |
-| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector                           |
-| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                                       |
-| `DISCORD_TOKEN`                | Discord bot token                                                         |
-| `DISCORD_SERVER_ID`            | The Discord server ID                                                     |
-| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                                          |
-| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment                       |
-| `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel              |
-| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                             |
-| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/`                |
-| `PURGE_ALLOW_PARTIAL_NETWORTH` | Allow explicitly labelled partial networth estimates; defaults to `false` |
+| Setting                        | Value                                                                                               |
+| ------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `MINECRAFT_HOST`               | `dragsim.co`                                                                                        |
+| `MINECRAFT_PORT`               | `25565`                                                                                             |
+| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version                                                   |
+| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                                                               |
+| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector                                                     |
+| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                                                                 |
+| `DISCORD_TOKEN`                | Discord bot token                                                                                   |
+| `DISCORD_SERVER_ID`            | The Discord server ID                                                                               |
+| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                                                                    |
+| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment                                                 |
+| `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel                                        |
+| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                                                       |
+| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/`                                          |
+| `PURGE_ALLOW_PARTIAL_NETWORTH` | Allow explicitly labelled partial networth estimates; defaults to `false`                           |
+| `PURGE_PROTECTED_USERNAMES`    | Comma-separated usernames hidden from purge and never kicked; cannot be re-included by the dropdown |
 
 Keep credentials in `.env`. Microsoft tokens are stored locally in
 `.minecraft-auth/`. Both are ignored by Git. Do not copy personal authentication
