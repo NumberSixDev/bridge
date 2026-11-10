@@ -64,7 +64,10 @@ export function parseGuildListHeader(value: string): GuildListHeader | undefined
 }
 
 function removeRankTags(value: string) {
-    return value.replace(/\[[^\]\r\n]{1,64}\]/g, '').trim();
+    return value
+        .replace(/\[[^\]\r\n]{1,64}\]/g, '')
+        .trim()
+        .replace(/\s+♲$/u, '');
 }
 
 export function extractGuildListUsernames(value: string) {

@@ -735,6 +735,12 @@ test('roster parser rejects a whole chat-like line containing bullets and handle
     ]);
     assert.deepEqual(extractGuildListUsernames('[VIP] Other: hello • FakeMember'), []);
     assert.deepEqual(extractGuildListUsernames('[VIP] Name extra • FakeMember'), []);
+    assert.deepEqual(extractGuildListUsernames('[MVP+] IronMember ♲ ● Other'), [
+        'IronMember',
+        'Other',
+    ]);
+    assert.deepEqual(extractGuildListUsernames('IronMember ♲ extra ● Other'), []);
+    assert.deepEqual(extractGuildListUsernames('Guild > IronMember: hello ♲ ● Other'), []);
     assert.deepEqual(extractGuildListUsernames('§x§1§2§3§4§5§6[MOD] Member • [VIP+] Other •'), [
         'Member',
         'Other',
