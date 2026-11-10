@@ -1,6 +1,6 @@
 # Guild purge
 
-Updated 10 November 2026. Owner: Astra. Status: implemented; 67 tests and local checks pass; live release verification pending.
+Updated 10 November 2026. Owner: Astra. Status: pushed and deployed; 67 tests pass; live command, role and read-only API/capability checks verified. User panel check pending.
 
 ## Target and authority
 
@@ -24,4 +24,6 @@ Updated 10 November 2026. Owner: Astra. Status: implemented; 67 tests and local 
 -   `pnpm test`: TypeScript build and all67 tests pass. Formatting/lint, configuration validation and diff whitespace pass.
 -   Regression coverage includes either/both/equality comparisons, partial policy/privacy/freshness, page/select bounds, persisted exclusions, concurrent selections, corruption/write failure, denied roles, wrong actor/channel/expired controls, stale nonces, duplicate confirmation, changed requirements/exclusions/roles during fresh lookup, newly compliant members, frozen membership, disconnect/shutdown, successful verified removal and stop after an unconfirmed command.
 -   Coordinator ended at its time cap. Root resolved build/lint failures, completed the focused safety review and added the concurrency/replay/authority regression cases. No worker remains active.
--   Live command registration, capability probe and panel check are pending. No real kicks have been sent by agents.
+-   Source revision `7266ded` is pushed to origin and deployed via the existing Mac LaunchAgent. Discord API confirms `/purge` is registered. The bot reconnected and verified the server help entry `/guild kick <player>` on its existing Minecraft connection.
+-   A read-only live lookup of a below-minimum player passed the fresh purge evaluator using the explicitly approved partial-networth policy. The requesting user currently has an allowed configured Discord role. No real kick was issued.
+-   Initial startup roster collection was incomplete (an existing intermittent server-list behaviour); the command forces a new counted roster and fails closed if unavailable. Ben has been asked to run `/purge` and confirm the panel/dropdown/arrows. Real removals and the bot's kick permission require the authorised user's explicit final confirmation; neither is claimed tested live.
