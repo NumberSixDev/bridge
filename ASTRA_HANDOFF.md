@@ -29,7 +29,7 @@ Updated: 10 November 2026. Status: running and verified live.
 -   The join step runs after reconnects too. A transfer timeout reconnects rather than falsely announcing readiness.
 -   Disconnect reasons are visible in logs. Formatting excludes local authentication files.
 -   Guild parsing supports optional server-rank prefixes and optional guild-role suffixes. All bracketed tags are preserved, including multiple or previously unknown tags; untagged players and own-echo suppression remain supported.
--   Source implementation through `823652805e9149d4ac8e3aeaaca7085ccd31629f` was pushed and verified on the remote feature branch; later documentation commits retain the same runtime code.
+-   Source implementation through `1536e9a2c049f85d45352d23cf8d5d761cf9bd19` was pushed and verified on the remote feature branch; later documentation commits retain the same runtime code.
 
 ## Verification
 
@@ -39,6 +39,7 @@ Updated: 10 November 2026. Status: running and verified live.
 -   Discord intent/channel permission checks passed; the configured staff role exists.
 -   Live Discord-to-Minecraft test: received by the bot, emitted as `/gc`, and observed in actual server guild chat.
 -   Live Minecraft-to-Discord test: received in guild chat and delivered once to the configured Discord channel.
+-   After the parser update and service restart, Discord readback confirmed a real `[MOD] DragSim [GM]` guild message, preserving both server rank and guild role.
 -   Discord readback confirmed the original message remains, one incoming guild copy, zero own-echo duplicates, and zero messages from the tested other channel.
 -   A controlled network drop triggered the 15-second reconnect, resource-pack acknowledgement and automatic hub entry.
 -   A controlled supervised process stop produced a new process and a fresh successful DragSim connection. Both error logs were empty afterwards.
