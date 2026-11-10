@@ -103,16 +103,35 @@ prefixes differ from the supplied example, adjust the parser using real examples
 
 ## Keeping it running
 
-The Mac must stay powered on, connected to the network and awake. Once the first
-live checks succeed, the bundled PM2 commands can supervise the process:
+The Mac must stay powered on, connected to the network and awake. Ben's Mac uses
+an approved user LaunchAgent, `com.numbersixdev.dragsim-guild-bridge`, to start the
+bridge at login and restart it if it exits. It runs the built application from
+this checkout and reads the local `.env`. Logs are in `logs/launchd.log` and
+`logs/launchd-error.log`.
+
+```sh
+# Check the running service
+launchctl print "gui/$(id -u)/com.numbersixdev.dragsim-guild-bridge"
+
+# Stop it, including automatic restarts for the current login session
+launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.numbersixdev.dragsim-guild-bridge.plist"
+
+# Start it again
+launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.numbersixdev.dragsim-guild-bridge.plist"
+```
+
+Do not sign the bot's Minecraft account into the game while the bridge is using
+it. Normal play and relay tests should use a different account.
+
+PM2 is an alternative for installations without the LaunchAgent. Do not run both
+supervisors for the same bot:
 
 ```sh
 pnpm pm2:start
 pnpm pm2:kill
 ```
 
-`pm2:kill` removes only the process named `bridge`. Automatic startup after a Mac
-reboot is not configured by this project.
+`pm2:kill` removes only the process named `bridge`; it does not stop the LaunchAgent.
 
 ## Attribution
 
