@@ -1,6 +1,6 @@
 # Guild Bridge recruitment
 
-Updated 10 November 2026. Status: deployed; final application-channel separation ready for release.
+Updated 10 November 2026. Status: PUSHED and DEPLOYED; final genuine-application check pending.
 
 ## Target and authority
 
@@ -22,14 +22,17 @@ Updated 10 November 2026. Status: deployed; final application-channel separation
 ## Evidence
 
 -   Live HTTP200 profile, official networth and external price-service checks succeeded. Runtime uses only the official HTTPS endpoints. Completed client verified live for two owned accounts: identity, purse and networth available; both valuations partial and therefore manual.
--   32 offline tests pass, plus build, formatting/lint and configuration validation. Includes exact API paths, both thresholds, bad/missing/stale/private/partial data, role isolation, settings modal/buttons, concurrency, disconnection, persistence failure, restart recovery and Discord delivery retry.
+-   33 offline tests pass, plus build, formatting/lint and configuration validation. Includes exact API paths, both thresholds, bad/missing/stale/private/partial data, role isolation, settings modal/buttons, concurrency, disconnection, persistence failure, restart recovery and Discord delivery retry.
 -   Admin/Guild Master roles and existing guild-bridge channel verified via Discord API.
 -   Existing accept-everyone mode was disabled locally before implementation. Old supervised service was reconnected successfully.
 -   Delegated execution stopped at its 20-minute deadline; no child remains. Owner corrected API route, recovery/decision races and completed additional tests. No unfinished delegated changes remain.
 
 ## Runtime and remaining verification
 
--   Node22.22.3, pnpm11.1.2, Minecraft1.21.4 as LabGeek2; native LaunchAgent `com.numbersixdev.dragsim-guild-bridge` runs `dist/src/index.js`. PM2 unused.
--   Credentials remain private in .env/.minecraft-auth. Never sign the Minecraft bot account into another client.
--   Runtime 1eae35d was pushed/deployed; supervised reconnect and all four slash commands verified live. Ben invoked the panel; Discord readback confirmed disabled/unset settings and both buttons, but it posted in the wrong channel. The correction posts in the command’s invoking channel, updates new-application routing, deactivates the old panel and includes a direct reply link. Channel-choice regression passes. Corrected release and admin modal/genuine-application proof remain.
--   macOS CUA screen capture failed (SCStreamError -3811); no successful Discord UI test is claimed. Discord API is working.
+-   Node22.22.3, pnpm11.1.2, Minecraft1.21.4 as LabGeek2; native LaunchAgent `com.numbersixdev.dragsim-guild-bridge` runs `dist/src/index.js`. PM2 unused. Credentials remain private in .env/.minecraft-auth; no second Minecraft login is allowed.
+-   Runtime 113fc02 was pushed/deployed, with application channel and on-demand settings separated. The final deleted-panel recovery fix is included with this handoff. Deployment uses the built checkout on the feature branch.
+-   All four slash commands registered live; fresh supervised DragSim connection confirmed. Ben confirmed the final panel and Edit minimums form both work after channel routing was corrected.
+-   Application destination is pinned locally to 1569793036383162428. Bot View Channel, Send Messages, Embed Links and Read Message History permissions verified there. Panel location is independently chosen by the invoking slash-command channel. No panel is created on startup; deleted panels stay absent until requested.
+-   Auto acceptance is off and thresholds unset. Prior accept-everyone mode is inert. Existing credentials/caches/startup/sleep configuration preserved.
+-   Final genuine applicant/manual decision proof has been requested from Ben; no new recruitment admission is claimed yet. Offline tests cover both manual decisions and automatic qualification. Earlier accept-command permission was confirmed live before this replacement.
+-   macOS CUA capture failed; UI confirmation comes from Ben, and Discord state comes from API readback.

@@ -593,3 +593,23 @@ test('startup and settings changes never create a panel before the panel command
     assert.equal(h.channel.messagesById.size, 0);
     assert.equal(h.service.settings.panelMessageId, undefined);
 });
+
+test('a deleted panel is forgotten on restart and is not automatically reposted', async () => {
+    const h = makeService({
+        state: {
+            ...createDefaultRecruitmentState(),
+            settings: {
+                autoAcceptEnabled: false,
+                panelChannelId: '12345678901234568',
+                panelMessageId: '12345678901234001',
+            },
+        },
+    });
+    h.channel.messages.fetch = async () => {
+        throw Object.assign(new Error('Unknown Message'), { code: 10008 });
+    };
+    await h.service.onDiscordReady();
+    assert.equal(h.service.settings.panelMessageId, undefined);
+    assert.equal(h.channel.messagesById.size, 0);
+    assert.equal(h.service.settings.autoAcceptEnabled, false);
+});

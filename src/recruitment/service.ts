@@ -774,7 +774,15 @@ export default class RecruitmentService {
                 await message.edit(this.panelPayload());
                 return true;
             } catch (error) {
-                if (!createIfMissing) {
+                if ((error as { code?: number }).code === 10008) {
+                    // A deliberately deleted panel stays absent until the command is invoked.
+                    await this.exclusive(async () => {
+                        this.state.settings.panelMessageId = undefined;
+                        this.state.settings.panelChannelId = undefined;
+                        await this.persist();
+                    });
+                    if (!createIfMissing) return false;
+                } else if (!createIfMissing) {
                     winston.warn('Saved recruitment panel message could not be updated:', error);
                     return false;
                 }
