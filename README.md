@@ -136,7 +136,7 @@ Use `/refresh` to force a fresh guild list, player stats and networth lookup. Ev
 Use `/gleaderboard player username:<MinecraftName>` for a public report of every
 available metric position for one current guild member, ordered by best position
 first (#1, #2, etc.) with unavailable metrics last. Reports show the API
-server rank, available-data denominator, 25 entries per page and the original
+server rank, position-only line prefixes, 25 entries per page and the original
 search-time footer. The target is checked against the verified current roster
 before any player API work and again when a page button is used.
 

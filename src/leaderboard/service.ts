@@ -1123,7 +1123,7 @@ export default class LeaderboardService {
                     const position =
                         entry.position === undefined || entry.rankedMembers === undefined
                             ? 'Unranked'
-                            : `#${entry.position} / ${entry.rankedMembers}`;
+                            : `#${entry.position}`;
                     return `**${position}** · ${category} · ${entry.metric.label.slice(
                         0,
                         64

@@ -391,12 +391,11 @@ test('player report uses shared tie ranking, API rank, 25-entry pages, and rejec
     const initial = command.calls.find(([name]) => name === 'editReply')[1];
     assert.equal(profileCalls, names.length);
     assert.match(initial.embeds[0].data.description, /Player: \*\*Member1\*\*/);
-    assert.match(initial.embeds[0].data.description, /#2 \/ 27/);
+    assert.match(initial.embeds[0].data.description, /^\*\*#2\*\* · /m);
     assert.doesNotMatch(initial.embeds[0].data.description, /\[MVP\+\] Member1/);
     assert.match(initial.embeds[0].data.footer.text, /Report page 1\/2/);
     assert.equal(
-        (initial.embeds[0].data.description.match(/^\*\*(?:#\d+ \/ \d+|Unranked)\*\* · /gm) || [])
-            .length,
+        (initial.embeds[0].data.description.match(/^\*\*(?:#\d+|Unranked)\*\* · /gm) || []).length,
         25
     );
     const nextId = initial.components[0].components[2].data.custom_id;
@@ -473,9 +472,9 @@ test('player reports sort best positions first, unavailable last and capitalise 
     );
     const payload = service.reportPayload({ id: 'test', report }, 0);
     const description = payload.embeds[0].data.description;
-    assert.match(description, /^\*\*#1 \/ 2\*\* · Purse/m);
-    assert.match(description, /^\*\*#1 \/ 2\*\* · RNG/m);
-    assert.match(description, /^\*\*#2 \/ 2\*\* · Networth/m);
+    assert.match(description, /^\*\*#1\*\* · Purse/m);
+    assert.match(description, /^\*\*#1\*\* · RNG/m);
+    assert.match(description, /^\*\*#2\*\* · Networth/m);
     assert.match(description, /^\*\*Unranked\*\* · Collections .*Unavailable/m);
     assert.doesNotMatch(description, /^\*\*\d+\./m);
     service.stop();
@@ -679,7 +678,7 @@ test('player report pages recalculate departed members and retain the original s
     names = ['Member1'];
     service.roster.disconnected();
     await page('prev');
-    assert.match(payload.embeds[0].data.description, /#1 \/ 1/);
+    assert.match(payload.embeds[0].data.description, /^\*\*#1\*\* · /m);
     assert.equal(payload.embeds[0].data.footer.text.split(' • ')[1], footerTime);
     names = ['Master'];
     service.roster.disconnected();
