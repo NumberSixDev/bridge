@@ -28,11 +28,12 @@ Updated: 10 November 2026. Status: running and verified live.
 -   New connections land in a profile selector where guild sends are rejected. Local `MINECRAFT_JOIN_COMMAND=/warp hub` is now configured; the bridge waits for the hub spawn before announcing readiness.
 -   The join step runs after reconnects too. A transfer timeout reconnects rather than falsely announcing readiness.
 -   Disconnect reasons are visible in logs. Formatting excludes local authentication files.
+-   Guild parsing supports optional server-rank prefixes and optional guild-role suffixes. All bracketed tags are preserved, including multiple or previously unknown tags; untagged players and own-echo suppression remain supported.
 -   Source implementation through `823652805e9149d4ac8e3aeaaca7085ccd31629f` was pushed and verified on the remote feature branch; later documentation commits retain the same runtime code.
 
 ## Verification
 
--   `pnpm test`: build and all ten offline tests passed, including resource-pack wire UUIDs and hub readiness gating.
+-   `pnpm test`: build and all eleven offline tests passed, including resource-pack wire UUIDs, hub readiness gating, and 120 prefix/suffix combinations passed through the actual relay handler.
 -   `pnpm format:check`: formatting and lint passed.
 -   `pnpm check-config`: passed.
 -   Discord intent/channel permission checks passed; the configured staff role exists.

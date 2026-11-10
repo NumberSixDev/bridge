@@ -1,5 +1,10 @@
-export const GUILD_CHAT_PATTERN =
-    /^Guild >\s+(?:(\[[^\]\r\n]+\])\s+)?([A-Za-z0-9_]{1,16}):\s?(.*)$/;
+const bracketedTags = String.raw`\[[^\]\r\n]+\](?:[ \t]*\[[^\]\r\n]+\])*`;
+
+// Server ranks precede the username; optional guild roles follow it.
+// Preserve arbitrary bracketed tags so new ranks do not silently lose messages.
+export const GUILD_CHAT_PATTERN = new RegExp(
+    String.raw`^Guild >[ \t]+(?:(${bracketedTags})[ \t]*)?([A-Za-z0-9_]{1,16})(?:[ \t]*(${bracketedTags}))?:[ \t]?(.*)$`
+);
 
 export const singleLine = (value: string) =>
     value

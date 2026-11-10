@@ -36,19 +36,71 @@ test('parses ranked and unranked guild messages while excluding other chat', () 
     assert.deepEqual('Guild > [DRAGON] LabGeek: .'.match(GUILD_CHAT_PATTERN).slice(1), [
         '[DRAGON]',
         'LabGeek',
+        undefined,
         '.',
     ]);
     assert.deepEqual('Guild > LabGeek: hello'.match(GUILD_CHAT_PATTERN).slice(1), [
         undefined,
         'LabGeek',
+        undefined,
         'hello',
     ]);
     for (const text of [
         'Officer > [DRAGON] LabGeek: hello',
+        'Officer > [MOD] DragSim [GM]: hello',
+        'From [MOD] DragSim [GM]: hello',
+        '[MOD] DragSim [GM]: hello',
         'LabGeek: hello',
         'Guild > LabGeek joined',
+        'Guild > [MOD] DragSim [GM] joined the guild',
     ]) {
         assert.equal(GUILD_CHAT_PATTERN.test(text), false, text);
+    }
+});
+
+test('all server prefixes and guild-role suffixes reach Discord without a tag allowlist', async () => {
+    const prefixes = [
+        undefined,
+        '[VIP]',
+        '[VIP+]',
+        '[MVP]',
+        '[MVP+]',
+        '[DRAGON]',
+        '[HELPER]',
+        '[MOD]',
+        '[ADMIN]',
+        '[MANAGER]',
+        '[OWNER]',
+        '[DEVELOPER]',
+        '[DEV]',
+        '[NEW RANK]',
+        '[VIP] [HELPER]',
+    ];
+    const suffixes = [
+        undefined,
+        '[GM]',
+        '[ADMIN]',
+        '[STAFF]',
+        '[BRIDGE]',
+        '[MEMBER]',
+        '[NEW ROLE]',
+        '[GM] [STAFF]',
+    ];
+    const sent = [];
+    const bridge = {
+        mineflayer: { username: 'LabGeek2' },
+        discord: { send: (value) => sent.push(value) },
+    };
+    for (const prefix of prefixes) {
+        for (const suffix of suffixes) {
+            const author = [prefix, 'DragSim', suffix].filter(Boolean).join(' ');
+            const raw = `Guild > ${author}: guild message`;
+            const match = raw.match(GUILD_CHAT_PATTERN);
+            assert.ok(match, `Must recognise ${raw}`);
+            assert.deepEqual(match.slice(1), [prefix, 'DragSim', suffix, 'guild message']);
+            await guildChat.run(bridge, ...match.slice(1));
+            assert.equal(sent.pop(), `**${author}:** guild message`);
+        }
     }
 });
 
@@ -80,8 +132,12 @@ test('guild relay sends ranked author and ignores own Minecraft echo', async () 
         mineflayer: { username: 'LabGeek' },
         discord: { send: (value) => sent.push(value) },
     };
-    await guildChat.run(bridge, '[DRAGON]', 'OtherPlayer', 'hello');
-    await guildChat.run(bridge, undefined, 'LabGeek', 'own echo');
+    await guildChat.run(bridge, '[DRAGON]', 'OtherPlayer', undefined, 'hello');
+    await guildChat.run(bridge, undefined, 'LabGeek', undefined, 'own echo');
+    const taggedEcho = 'Guild > [DRAGON] LabGeek [BRIDGE]: own tagged echo'.match(
+        GUILD_CHAT_PATTERN
+    );
+    await guildChat.run(bridge, ...taggedEcho.slice(1));
     assert.deepEqual(sent, ['**[DRAGON] OtherPlayer:** hello']);
 });
 
