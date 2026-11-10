@@ -81,7 +81,7 @@ class FakeChannel {
     }
 }
 
-function makeService({ lookupEvidence = evidence(), ready = true, state } = {}) {
+function makeService({ lookupEvidence = evidence(), ready = true, state, now = () => NOW } = {}) {
     const store = new MemoryRecruitmentStore(
         state ?? {
             ...createDefaultRecruitmentState(),
@@ -94,7 +94,7 @@ function makeService({ lookupEvidence = evidence(), ready = true, state } = {}) 
     const service = new RecruitmentService({
         store,
         lookup: { lookup: async (username) => ({ ...lookupEvidence, username }) },
-        now: () => NOW,
+        now,
         getChannel: () => channel,
         isMinecraftReady: () => minecraftReady,
         sendAcceptance: (username) => commands.push(username),
@@ -735,6 +735,44 @@ test('application reports compare both requirements and offer advice even with a
         applicationReport(evidence(), { autoAcceptEnabled: false }, NOW).join('\n'),
         /Minimum not set/
     );
+});
+
+test('application expiry uses the original join receipt plus five minutes across delays, edits and restart', async () => {
+    let clock = NOW;
+    const h = makeService({ now: () => clock });
+    let release;
+    h.service.mutationTail = new Promise((resolve) => {
+        release = resolve;
+    });
+    const joining = h.service.handleJoinRequest('Applicant');
+    clock += 2 * 60_000;
+    release();
+    await joining;
+    const application = h.store.snapshot().applications[0];
+    assert.equal(application.receivedAt, NOW);
+    const deadline = `Expires: <t:${(NOW + 5 * 60_000) / 1000}:R>`;
+    const message = h.channel.messagesById.get(application.messageId);
+    assert.ok(message.payload.embeds[0].data.description.includes(deadline));
+
+    clock += 60_000;
+    await h.service.handleJoinRequest('Applicant');
+    await h.service.setMinimums('1b', '100m');
+    await h.service.deliverApplicationCard(application.id);
+    assert.equal(h.channel.messagesById.size, 1);
+    assert.ok(message.payload.embeds[0].data.description.includes(deadline));
+    h.service.stop();
+
+    clock += 3 * 60_000;
+    const restarted = makeService({ state: h.store.snapshot(), now: () => clock });
+    restarted.channel.messagesById = h.channel.messagesById;
+    try {
+        await restarted.service.onDiscordReady();
+        assert.ok(message.payload.embeds[0].data.description.includes(deadline));
+        assert.equal(restarted.channel.messagesById.size, 1);
+        assert.deepEqual(restarted.commands, []);
+    } finally {
+        restarted.service.stop();
+    }
 });
 
 test('application embeds show clean profiles and refresh their report when minimums change', async () => {

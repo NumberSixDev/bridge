@@ -108,6 +108,9 @@ Existing applications retain their original cards. The command reply links direc
 Set `RECRUITMENT_PING_ROLE_ID` to add a role mention as normal message text above
 each new application embed. Only that role is allowed to be pinged; card updates
 do not ping again. Leave it blank to disable mentions.
+Application embeds show `Expires` using Discord's automatically updated relative
+timestamp, exactly five minutes after the join notice was received. Delivery
+delays, duplicate notices, card edits and bot restarts do not reset that deadline.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
 The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto

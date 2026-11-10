@@ -33,6 +33,7 @@ import {
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
 const CLOSED_SUPPRESSION_MS = 60_000;
+const JOIN_REQUEST_LIFETIME_MS = 5 * 60_000;
 const RETENTION_MS = 30 * 24 * 60 * 60_000;
 const MAX_APPLICATIONS = 1_000;
 const PANEL_EDIT_ID = 'recruitment:panel:edit';
@@ -174,6 +175,7 @@ export default class RecruitmentService {
             winston.warn('Ignoring a malformed guild join request.');
             return;
         }
+        const receivedAt = this.now();
         const id = await this.exclusive(async () => {
             this.requireAvailable();
             this.pruneApplications();
@@ -196,7 +198,7 @@ export default class RecruitmentService {
                 id: randomUUID(),
                 username,
                 usernameKey: key,
-                receivedAt: this.now(),
+                receivedAt,
                 status: 'pending',
                 lookupStatus: 'pending',
                 coverageIssues: [],
@@ -722,6 +724,9 @@ export default class RecruitmentService {
             ...applicationReport(application, this.state.settings, this.now()),
             '',
             `Status: **${statusLabel(application)}**`,
+            `Expires: <t:${Math.floor(
+                (application.receivedAt + JOIN_REQUEST_LIFETIME_MS) / 1000
+            )}:R>`,
             `Estimated networth (includes purse): **${
                 application.networth === undefined
                     ? 'Unavailable'
