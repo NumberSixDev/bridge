@@ -20,10 +20,10 @@ Updated 10 November 2026. Owner: Astra. Status: PUSHED, DEPLOYED, roster/API ver
 
 ## Verification and current state
 
--   Source commits `4834476`, `aedda4e` and `d3239fd` pushed to origin and deployed via existing LaunchAgent. The subsequent /refresh command is locally verified and awaiting release.
+-   Source commits `4834476`, `aedda4e` and `d3239fd` pushed to origin and deployed via existing LaunchAgent. Public /refresh is pushed and deployed in b948ef2; Discord API confirms it is registered.
 -   All 50 tests pass, including build; formatting/lint and check-config pass. Tests cover roster parsing/counts/chat-spoof rejection, cache, missing/private data, rank display, sorting, page boundaries/channel isolation, departed members/expiry and rate limiting.
 -   Live Discord API confirms all eleven `/gleaderboard` subcommands registered.
--   Live bot confirmed 83 members across all five guild ranks after the separator correction.
+-   Latest live bot check confirmed 85 members across all five guild ranks after the separator correction.
 -   Real API client verified profiles, networth, rank mapping and all categories for two members. Their networth is partial and displayed as an estimate. No inventories retained in the stats cache.
 -   Ben was asked to run `/gleaderboard networth` and use both arrows. Awaiting confirmation/readback of that actual user journey.
 -   Coordinator timed out after leaving its implementation and passing-check handoff; owner completed review fixes, rank labels, additional tests, push and deployment. No coordinator remains running.
