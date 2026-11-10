@@ -543,12 +543,14 @@ export default class RecruitmentService {
             const networth = new TextInputBuilder()
                 .setCustomId('minimum_networth')
                 .setLabel('Minimum estimated networth')
+                .setPlaceholder('e.g. 15b, 500m or 250k')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
                 .setValue(this.state.settings.minimumNetworth?.toString() ?? '');
             const purse = new TextInputBuilder()
                 .setCustomId('minimum_purse')
                 .setLabel('Minimum purse')
+                .setPlaceholder('e.g. 100m, 1b or 250k')
                 .setStyle(TextInputStyle.Short)
                 .setRequired(false)
                 .setValue(this.state.settings.minimumPurse?.toString() ?? '');

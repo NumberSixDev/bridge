@@ -19,5 +19,14 @@ export function parseAmount(input: string, allowUnset = true): number | undefine
 }
 
 export function formatAmount(amount: number | undefined): string {
-    return amount === undefined ? 'Not set' : amount.toLocaleString('en-GB');
+    if (amount === undefined) return 'Not set';
+    const unit = [
+        { divisor: 1e12, suffix: 't' },
+        { divisor: 1e9, suffix: 'b' },
+        { divisor: 1e6, suffix: 'm' },
+        { divisor: 1e3, suffix: 'k' },
+    ].find(({ divisor }) => amount >= divisor);
+    // Truncate to match 1,217,130,121.333 -> 1.21b without changing stored values.
+    if (unit) return `${Math.trunc(amount / (unit.divisor / 100)) / 100}${unit.suffix}`;
+    return String(Math.trunc(amount * 100) / 100);
 }

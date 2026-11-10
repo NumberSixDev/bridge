@@ -36,3 +36,9 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards an
 -   Auto acceptance remains off. Ben exercised the form and saved 1 coin for both minimums; those user-selected values were preserved. Prior accept-everyone mode is inert. Existing credentials/caches/startup/sleep configuration preserved.
 -   Real application cards with purse/networth and active buttons were read back in the selected applications channel. The service observed an authorised manual acceptance button and sent its guild acceptance command; a final server-membership confirmation is pending from Ben. Offline tests cover manual Deny and automatic qualification; no automatic admission is claimed while the setting remains off.
 -   macOS CUA capture failed; UI confirmation comes from Ben, and Discord state comes from API readback.
+
+## Compact amount display
+
+-   Application cards and settings summaries use lowercase k/m/b/t with up to two decimal places, truncated to match Ben’s examples (1,217,130,121.333 -> 1.21b; 5,812,272 -> 5.81m). Stored amounts and comparisons remain full precision.
+-   Minimum fields accept case-insensitive suffixes including 15b, 100m, 250k and 2t; both modal fields have examples.
+-   Added exact-example display tests and lowercase input coverage. Existing cards will be refreshed during release.

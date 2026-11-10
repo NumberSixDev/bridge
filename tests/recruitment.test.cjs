@@ -16,7 +16,7 @@ Object.assign(process.env, {
     RECRUITMENT_CHANNEL_ID: '12345678901234568',
 });
 
-const { parseAmount } = require('../dist/src/recruitment/amount.js');
+const { parseAmount, formatAmount } = require('../dist/src/recruitment/amount.js');
 const { evaluateEligibility } = require('../dist/src/recruitment/policy.js');
 const { FileRecruitmentStore } = require('../dist/src/recruitment/store.js');
 const MemoryRecruitmentStore = require('../dist/src/recruitment/memory-store.js').default;
@@ -109,12 +109,27 @@ function makeService({ lookupEvidence = evidence(), ready = true, state } = {}) 
 }
 
 test('amount parsing accepts K/M/B/T and rejects unsafe or negative values', () => {
+    assert.equal(parseAmount('15b'), 15_000_000_000);
+    assert.equal(parseAmount('5.81m'), 5_810_000);
+    assert.equal(parseAmount('250k'), 250_000);
+    assert.equal(parseAmount('2t'), 2_000_000_000_000);
     assert.equal(parseAmount('1.5K'), 1500);
     assert.equal(parseAmount('2,000,000'), 2_000_000);
     assert.equal(parseAmount('none'), undefined);
     assert.throws(() => parseAmount('-1'), /non-negative/);
     assert.throws(() => parseAmount('Infinity'), /non-negative/);
     assert.throws(() => parseAmount('999999999999999999999T'), /safe number/);
+});
+
+test('display amounts use lowercase compact units and truncate at two decimal places', () => {
+    assert.equal(formatAmount(1_217_130_121.333), '1.21b');
+    assert.equal(formatAmount(5_812_272), '5.81m');
+    assert.equal(formatAmount(15_000_000_000), '15b');
+    assert.equal(formatAmount(1_010_000_000), '1.01b');
+    assert.equal(formatAmount(999_999), '999.99k');
+    assert.equal(formatAmount(1e12), '1t');
+    assert.equal(formatAmount(0), '0');
+    assert.equal(formatAmount(undefined), 'Not set');
 });
 
 test('eligibility is off by default, inclusive at both thresholds, and fails closed for incomplete data', () => {
@@ -400,7 +415,7 @@ test('settings panel opens a modal, persists changes, toggles auto mode and reje
         type: 'modal',
         customId: 'recruitment:panel:requirements',
         message,
-        fields: { minimum_networth: '1B', minimum_purse: '10M' },
+        fields: { minimum_networth: '1b', minimum_purse: '10m' },
     });
     await modal.run();
     assert.equal(h.store.snapshot().settings.minimumNetworth, 1e9);
