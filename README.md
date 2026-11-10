@@ -134,7 +134,7 @@ alone is not sufficient for automatic admission. The panel explains this policy.
 `/gleaderboard` ranks only the members returned by the bot's own `/g list`.
 The roster must contain complete, count-matched Guild Master, Admin, Staff,
 Bridge and Member groups before it can be used. A complete roster is cached for
-up to 60 seconds and is cleared on disconnect; an incomplete or failed refresh
+up to ten minutes, refreshes in the background every ten minutes while connected, and is cleared on disconnect; an incomplete or failed refresh
 is never used as a stale fallback.
 
 Available categories are `networth`, `purse`, `collections`, `skills`,

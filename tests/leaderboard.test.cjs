@@ -253,8 +253,8 @@ function makeCommandInteraction(subcommand, userId = 'user') {
     return { interaction, calls };
 }
 
-test('leaderboard service ranks only the current roster, paginates ten rows, and isolates buttons', async () => {
-    const names = ['Master', ...Array.from({ length: 11 }, (_, index) => `Member${index + 1}`)];
+test('leaderboard service ranks only the current roster, paginates 25 rows, and isolates buttons', async () => {
+    const names = ['Master', ...Array.from({ length: 26 }, (_, index) => `Member${index + 1}`)];
     let rosterRequest = 0;
     const lookup = {
         async getProfile(username) {
@@ -285,6 +285,7 @@ test('leaderboard service ranks only the current roster, paginates ten rows, and
     const payload = command.calls.find(([name]) => name === 'editReply')[1];
     assert.match(payload.embeds[0].data.description, /Master/);
     assert.match(payload.embeds[0].data.footer.text, /Page 1\/2/);
+    assert.equal((payload.embeds[0].data.description.match(/^\*\*\d+\./gm) || []).length, 25);
     assert.equal(payload.components[0].components[0].data.disabled, true);
     const nextId = payload.components[0].components[2].data.custom_id;
 
@@ -377,7 +378,7 @@ test('leaderboard removes departed members before publishing and on navigation, 
             async getProfile(username) {
                 fetches++;
                 if (username === 'Master') {
-                    now += 61_000;
+                    service.roster.disconnected();
                     names = names.filter((name) => name !== 'Member11');
                 }
                 return profile({
@@ -415,6 +416,7 @@ test('leaderboard removes departed members before publishing and on navigation, 
         },
     };
     names = names.filter((name) => name !== 'Master');
+    service.roster.disconnected();
     now += 61_000;
     await service.handleInteraction(button);
     assert.doesNotMatch(buttonCalls[0][1].embeds[0].data.description, /Master|Member11/);
@@ -438,4 +440,29 @@ test('long API retry-after stops queued requests instead of hammering a rate-lim
     await assert.rejects(client.getProfile('Player'), /rate limited/);
     await assert.rejects(client.getProfile('Other'), /rate limited/);
     assert.equal(calls, 1);
+});
+
+test('guild roster is reused for ten minutes and supports forced background refresh', async () => {
+    let now = 1_000;
+    let requests = 0;
+    const collector = new GuildRosterCollector({
+        now: () => now,
+        isMinecraftReady: () => true,
+        sendCommand: () => {
+            requests++;
+            completeRoster(collector);
+        },
+    });
+    await collector.getRoster();
+    now += 599_000;
+    await collector.getRoster();
+    assert.equal(requests, 1);
+    now += 1_000;
+    await collector.getRoster();
+    assert.equal(requests, 2);
+    await collector.getRoster(true);
+    assert.equal(requests, 3);
+    collector.disconnected();
+    await collector.getRoster();
+    assert.equal(requests, 4);
 });

@@ -9,7 +9,7 @@ export type GuildListGroup = (typeof GUILD_LIST_GROUPS)[number];
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
 const MAX_MEMBERS = 500;
 const DEFAULT_TIMEOUT_MS = 10_000;
-const DEFAULT_CACHE_MS = 60_000;
+export const GUILD_ROSTER_REFRESH_MS = 10 * 60_000;
 
 export interface GuildListHeader {
     group: GuildListGroup;
@@ -95,15 +95,15 @@ export class GuildRosterCollector {
         this.isMinecraftReady = options.isMinecraftReady;
         this.now = options.now ?? Date.now;
         this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-        this.cacheMs = options.cacheMs ?? DEFAULT_CACHE_MS;
+        this.cacheMs = options.cacheMs ?? GUILD_ROSTER_REFRESH_MS;
     }
 
     public get inFlight() {
         return Boolean(this.pending);
     }
 
-    public getRoster(): Promise<GuildRoster> {
-        if (this.cache && this.now() - this.cache.observedAt <= this.cacheMs) {
+    public getRoster(forceRefresh = false): Promise<GuildRoster> {
+        if (!forceRefresh && this.cache && this.now() - this.cache.observedAt < this.cacheMs) {
             return Promise.resolve(cloneRoster(this.cache));
         }
         this.cache = undefined;

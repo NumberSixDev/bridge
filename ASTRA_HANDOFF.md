@@ -1,46 +1,39 @@
-# Guild leaderboard task
+# Guild leaderboards
 
-## Goal and owner
+Updated 10 November 2026. Owner: Astra. Status: PUSHED, DEPLOYED, roster/API verified; awaiting Ben's Discord page-navigation confirmation.
 
-Ben requests public Discord `/gleaderboard` commands ranking ONLY current Minecraft guild members, descending, across all available useful numeric player stats, with previous/next arrow buttons. Astra owns decisions and final live delivery. Status READY FOR ASTRA REVIEW; live release outstanding.
+## Goal and decisions
 
-## Verified context and authority
+-   Public `/gleaderboard` ranks current Minecraft guild members highest first, with API server-rank labels and 25 rows per page. Anyone in the configured Discord server can use it and the left/right buttons.
+-   Categories: networth, purse, collections, skills, bestiary, slayer, dungeons, mining, currencies, stats and RNG. Optional stat autocomplete selects individual metrics. XP, levels and counts stay distinct.
+-   Membership comes exclusively from the bot's `/g list`, all five rank groups and exact counts. The live separator is `●`; the parser also supports `•`. Complete rosters cache for ten minutes, refresh in the background every ten minutes while connected and clear on disconnect. Never use applicants, Discord roles or the global top 25 as membership.
+-   Official HTTPS player and networth API, selected main profile identity checks, two concurrent requests, bounded time/body/retry handling and shared rate-limit backoff. Five-minute in-memory stats cache; no inventory payload cached or committed. Private networth omitted, partial public networth marked approximate, unavailable data excluded rather than zeroed. Ben requested removal of the verbose partial-estimate summary line.
+-   Rank enums map to visible labels: MVP_PLUS -> MVP+, VIP_PLUS -> VIP+; DEFAULT has no prefix. All labels are sanitised/escaped.
+-   Sessions bind to guild/channel/message, expire after ten minutes and have bounded storage. Paging reuses stats and checks current membership; departed members are filtered before initial publication and after roster refresh on paging. No automatic leaderboard posts.
 
--   Repo `/Users/ben/Documents/ChatGPT/Guild Bridge`, branch `feat/dragsim-guild-chat`, starting clean HEAD `667e12ae50edd8b752ecc1511a98a798231fcfa7`. origin NumberSixDev/bridge, upstream MiscGuild/bridge; fetched and 0 ahead/behind. GitHub NumberSixDev only.
--   Ben authorises implementation, scoped commit/push and restart of the established Mac LaunchAgent. OWNER handles commit/push/restart/live verification after your work. Do not launch a second Minecraft connection or alter startup/sleep settings.
--   Preserve recruitment, bridge, current .env/settings and credentials. Never commit .env, .minecraft-auth, .bridge-data or player data. No dependency upgrades. You are not alone; preserve others' edits.
--   Coordinator owns implementation files, tests, README and THIS top handoff section. No other workers needed. Do not spawn nested agents or repeat root bootstrap. Scope complete implementation locally, deterministic checks and concise final report; no Git commit/push or live messaging by coordinator.
+## Target and authority
 
-## Approved architecture
+-   `/Users/ben/Documents/ChatGPT/Guild Bridge`, `feat/dragsim-guild-chat`, origin NumberSixDev/bridge, upstream MiscGuild/bridge. NumberSixDev only. Commit/push all completed changes, never .env, .minecraft-auth or .bridge-data.
+-   Ben authorises normal live delivery/restart of the existing LaunchAgent. No second Minecraft connection, startup/sleep changes or recruitment-setting changes.
+-   Native service `com.numbersixdev.dragsim-guild-bridge`, Node22, Minecraft1.21.4 as LabGeek2. Sources compile to dist/src/index.js.
 
-1. New leaderboards module with testable roster collector, bounded HTTPS data client, metric extraction/catalogue, cache and Discord pagination service. Wire to Bridge, Minecraft messages/ready/disconnect/stop and Discord interaction routing. Existing public command loader registers the new command; all users in configured Discord guild may use it, independent of staff recruitment roles.
-2. Authoritative roster is bot's own `/g list`. Ben supplied screenshots: exact headers `Guild Master [1]`, `Admin [6]`, `Staff [3]`, `Bridge [1]`, `Member [71]`; each followed by usernames optionally prefixed with one or more rank tags, separated by bullet `•`. Counts above are examples, NOT constants. Message wrapping on the screenshot may be client wrapping only; support multiline strings and separate messages. Strip Minecraft colour codes, ignore brackets in rank prefixes, validate usernames with /^[A-Za-z0-9_]{1,16}$/. Require ALL five recognised rank groups and exact per-group count match, unique names, reasonable cap 500. Never treat guild chat, join applications or Discord roles as a roster. Begin parsing only exact Guild Master header during an active requested query; ignore unrelated chatter. Resolve as soon as all groups complete; timeout 10s or disconnect rejects incomplete data. Single-flight query, cache complete roster 60s; no stale roster fallback on refresh error. Refresh after Minecraft hub ready, then on command/button as needed. Handle disconnect by clearing roster. Public method getRoster(): Promise<{guildName?:string,members:string[],observedAt:number}> is fine. No need to infer guild name if absent.
-3. Official player API verified live: GET https://dragsim.co/api/player/{username}?mode=main returns mode, fetched_at, player:{uuid,player,rank}, profiles:[{id,name,mode,selected}], profile:{id,profile_name,profile_mode,updated_at,inventory_hidden,...}. Validate returned username, UUID/profile identity and selected main NORMAL profile. GET /api/networth/{username}?mode=main&profile={id} returns profile_id, mode, total (includes purse), hidden, partial, calculated_at etc. Read src/recruitment/api.ts for proven patterns; do not change recruitment policy. Fetch bounded/timeout/HTTPS redirect error, cap response size; concurrency at most 2 across requests and handle 429/backoff without retry storms. Profiles cached ~5 minutes, per-player failures omitted and counted, never represented as zero. Networth only fetched for networth requests; partial estimates allowed for DISPLAY with a concise approximate marker/footnote, private networth omitted. Other public API stats available regardless of inventory privacy. Profile timestamps may be old for offline players: display data age honestly rather than excluding all offline members. No global top-25 endpoint or paid APIs.
-4. Verified numeric schemas: profile.coins (purse), motes,bits,haunted_candy_earned,dragon_essence,draconic_experience; skills:{combat,mining,taming,catacombs} values are XP; collections:{obsidian,ender_stone,summoning_eye,crying_obsidian,rough_amethyst,null_ovoid,...} counts; bestiary:{MOB_KEY:{kills}}; slayer:{zombie_xp,zombie_level,enderman_xp,enderman_level}; dungeons:{secrets,zombie_kills,skeletor_kills,class_xp:{CLASS:value},completions:{F7:value},best_score:{F7:value},essence:{TYPE:value}}; hotd:{tier,exp,core,ender,void,resets,tokens,nodes:{KEY:level}}; rng_meters:{KEY:{kills}}; stats:{base:{stat:number},additive:{},multiplicative:{},increase_max:{}}. Do not present XP as level or base stats as effective gear stats. No inventories/private item dumps. Include numeric leaves of these explicitly allowed paths, plus meaningful totals (collections items, bestiary kills, skills XP, slayer XP, dungeon completions), NOT totals of unrelated values. Sparse missing keys in an otherwise valid API counter map can mean 0 only when that source map is present and valid; missing source maps or players remain unknown.
-5. `/gleaderboard networth`, `/gleaderboard purse`, plus category subcommands collections, skills, bestiary, slayer, dungeons, mining, currencies, stats, rng with optional `stat` autocomplete where needed (<=25 choices per reply, bounded safe keys). Support all numeric leaves in these confirmed namespaces; default meaningful total or key per category. Autocomplete must respond promptly using catalogues/cache, never full-network refresh per keystroke. Known metric seeds plus discovered keys are suitable. Validate requested stat; do not evaluate arbitrary paths. User-friendly labels incl units XP/kills/base stat. Empty/unavailable results honest, no silently ranking outside guild.
-6. Public embed, ten rows/page descending numeric values, deterministic ties alphabetical. Compact amounts reuse formatAmount. Include ranked/roster counts and snapshot age; unavailable count and partial networth note concise. Buttons left/right disabled at boundaries, `Page X/Y`; sessions bound to bot message ID/channel/configured guild, TTL ~10 minutes, bounded session/cache counts. Anyone in that Discord channel can navigate. Defer command immediately before network work; defer button update promptly. IDs validate strictly, forged/wrong message/channel/server rejected, expired sessions respond privately telling user to rerun. Page snapshots stable (no API refetch for every page), but get fresh roster as needed and exclude anyone no longer a member; if roster refresh fails don't show stale membership. Coalesce concurrent fetches to prevent 82-member lookup storms; per-user command cooldown. Newly joined members can appear on next command; snapshot label explains scope. No new startup panels or unsolicited leaderboard posts.
+## Verification and current state
 
-## Acceptance criteria
+-   Source commits `4834476` and `aedda4e` pushed to origin and deployed via existing LaunchAgent.
+-   All 49 tests pass, including build; formatting/lint and check-config pass. Tests cover roster parsing/counts/chat-spoof rejection, cache, missing/private data, rank display, sorting, page boundaries/channel isolation, departed members/expiry and rate limiting.
+-   Live Discord API confirms all eleven `/gleaderboard` subcommands registered.
+-   Live bot confirmed 82 members across all five guild ranks after the separator correction.
+-   Real API client verified profiles, networth, rank mapping and all categories for two members. Their networth is partial and displayed as an estimate. No inventories retained in the stats cache.
+-   Ben was asked to run `/gleaderboard networth` and use both arrows. Awaiting confirmation/readback of that actual user journey.
+-   Coordinator timed out after leaving its implementation and passing-check handoff; owner completed review fixes, rank labels, additional tests, push and deployment. No coordinator remains running.
 
--   Tests demonstrate roster parsing colours/prefixes/multiline/zero-count groups, mismatch/incomplete/timeout/disconnect and ignoring chat spoofing; only complete guild roster accepted.
--   Metric extraction identity/privacy/missing/invalid numeric handling; descending/ties, >10 players multiple pages, under-10 one page, failures omitted, total types correct, cache/single-flight.
--   Public command and button handling boundaries/expired/forged IDs, guild/channel/message isolation and membership removal; recruitment tests unchanged.
--   pnpm test (includes build), pnpm format:check. Fix concrete in-scope failures. No fake live claims.
--   Owner then registers commands via normal service restart, verifies `/g list` roster count live, actual API rankings and Discord embed/buttons/readback, commits/pushes all completed scoped changes as NumberSixDev and verifies remote SHA. Real user button journey may require Ben.
+## Files
 
-## Execution state
-
--   Owner review added API server-rank labels (including MVP_PLUS -> MVP+), strict full-line roster parsing, private-networth exclusion, missing-currency handling, roster revalidation after long lookups, a two-minute lookup budget, shared API rate-limit backoff and omission of inventories from the cache.
--   Owner verification: all 48 tests, build, formatting/lint and configuration checks pass. NumberSixDev identity verified. Coordinator invocation timed out after leaving its completed implementation and handoff; no coordinator run remains active.
--   Implemented locally in `src/leaderboard/` with strict five-group `/g list` collection, 60-second complete-roster cache, disconnect invalidation, official bounded HTTPS profile/networth client, two-request limiter, one bounded 429 retry, five-minute in-memory profile/networth caches, safe metric catalogue/extraction, ranking snapshots, and Discord pagination sessions.
--   Wired public `gleaderboard` command registration, autocomplete, button routing, Minecraft `messagestr` handling, ready refresh, disconnect clearing and shutdown cleanup. Recruitment routing and policy were preserved.
--   Added `tests/leaderboard.test.cjs` covering roster colours/prefixes/multiline/zero groups, spoof rejection, mismatch/timeout/disconnect, single-flight/cache, metric identity/privacy/missing/invalid handling, API identity/429 handling, ranking order, ten-row pagination and channel isolation.
--   Updated `README.md` with the public leaderboard behaviour and safety boundary.
--   Verification passed locally: `pnpm test` (43 tests, including build), `pnpm format:check` (Prettier and ESLint), the TypeScript build and `pnpm check-config` (configuration valid; no accounts connected).
--   No commit, push, LaunchAgent restart, live `/g list`, Discord registration, API ranking readback or button journey was performed by this coordinator. Owner must perform those gates with the established account and one existing Minecraft connection.
--   No known implementation blocker remains. Final status: READY FOR ASTRA REVIEW.
+src/leaderboard/\*, src/discord/commands/gleaderboard.ts, src/discord/events/interaction-create.ts, src/bridge.ts, src/mineflayer/mineflayer.ts, tests/leaderboard.test.cjs and README.md.
 
 ---
+
+## Historical recruitment context
 
 # Guild Bridge recruitment
 

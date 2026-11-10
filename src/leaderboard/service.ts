@@ -16,7 +16,7 @@ import env from '@util/env';
 import { formatAmount } from '../recruitment/amount';
 import { DragSimLeaderboardClient } from './api';
 import { findMetricDefinition, isLeaderboardCategory, metricChoices } from './metrics';
-import { GuildRosterCollector } from './roster';
+import { GuildRosterCollector, GUILD_ROSTER_REFRESH_MS } from './roster';
 import { playerLabel } from './presentation';
 import {
     LEADERBOARD_CATEGORIES,
@@ -36,6 +36,7 @@ const SESSION_TTL_MS = 10 * 60_000;
 const MAX_SESSIONS = 100;
 const MAX_PROFILE_CACHE = 500;
 const COMMAND_COOLDOWN_MS = 5_000;
+const PAGE_SIZE = 25;
 const BUTTON_PATTERN = /^gleaderboard:([A-Za-z0-9_-]{1,80}):(prev|next)$/;
 
 interface CachedProfile {
@@ -122,6 +123,7 @@ export default class LeaderboardService {
     private readonly sessions = new Map<string, LeaderboardSession>();
     private readonly lastCommandAt = new Map<string, number>();
     private stopped = false;
+    private rosterTimer?: ReturnType<typeof setInterval>;
 
     public constructor(options: LeaderboardServiceOptions) {
         this.lookup = options.lookup ?? new DragSimLeaderboardClient();
@@ -143,6 +145,17 @@ export default class LeaderboardService {
 
     public async onMinecraftReady() {
         if (this.stopped) return;
+        clearInterval(this.rosterTimer);
+        this.rosterTimer = setInterval(() => {
+            this.roster.getRoster(true).catch((error: unknown) => {
+                winston.warn(
+                    `Scheduled guild roster refresh failed: ${
+                        error instanceof Error ? error.message : error
+                    }`
+                );
+            });
+        }, GUILD_ROSTER_REFRESH_MS);
+        this.rosterTimer.unref();
         await this.roster.getRoster().catch((error: unknown) => {
             winston.warn(
                 `Initial guild leaderboard roster refresh failed: ${
@@ -157,11 +170,15 @@ export default class LeaderboardService {
     }
 
     public onMinecraftDisconnected() {
+        clearInterval(this.rosterTimer);
+        this.rosterTimer = undefined;
         this.roster.disconnected();
     }
 
     public stop() {
         this.stopped = true;
+        clearInterval(this.rosterTimer);
+        this.rosterTimer = undefined;
         this.roster.stop();
         this.sessions.clear();
         this.profileCache.clear();
@@ -498,7 +515,7 @@ export default class LeaderboardService {
     }
 
     private pageCount(rows: RankedPlayer[]) {
-        return Math.max(1, Math.ceil(rows.length / 10));
+        return Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
     }
 
     private pageFromMessage(interaction: ButtonInteraction<'cached'>) {
@@ -512,7 +529,7 @@ export default class LeaderboardService {
         const { snapshot } = session;
         const pageCount = this.pageCount(snapshot.rows);
         const boundedPage = Math.min(Math.max(page, 0), pageCount - 1);
-        const rows = snapshot.rows.slice(boundedPage * 10, boundedPage * 10 + 10);
+        const rows = snapshot.rows.slice(boundedPage * PAGE_SIZE, (boundedPage + 1) * PAGE_SIZE);
         const description = [
             `Ranked **${snapshot.rows.length}** of **${snapshot.rosterCount}** current guild members.`,
             `Guild roster snapshot: **${ageLabel(this.now() - snapshot.rosterObservedAt)}**.`,
@@ -524,17 +541,12 @@ export default class LeaderboardService {
             snapshot.unavailableCount
                 ? `Unavailable or missing data: **${snapshot.unavailableCount}**.`
                 : undefined,
-            snapshot.partialCount
-                ? `≈ Partial networth estimates shown for **${snapshot.partialCount}** member${
-                      snapshot.partialCount === 1 ? '' : 's'
-                  }.`
-                : undefined,
             '',
             rows.length
                 ? rows
                       .map(
                           (row, index) =>
-                              `**${boundedPage * 10 + index + 1}.** ${playerLabel(
+                              `**${boundedPage * PAGE_SIZE + index + 1}.** ${playerLabel(
                                   row.username,
                                   row.rank
                               )} — ${valueLabel(
