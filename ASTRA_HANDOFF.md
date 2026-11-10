@@ -49,3 +49,5 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards an
 -   A concise report at the top compares each amount with the current minimum, then suggests Accept, below-minimum manual review, data verification or setting the minimums. Advice is independent of the auto-accept switch and never performs a decision.
 -   Open cards refresh their report when minimums change. Saved settings and full-precision comparisons are preserved.
 -   37 offline tests cover formatting, boundary comparisons, missing/private/partial/stale evidence and refreshing reports without sending commands.
+
+-   Application cards omit the verbose Coverage and Review lines and the acceptance-confirmation footnote at Ben’s request. The concise requirement report, status and operational notices remain; underlying eligibility checks and saved evidence are unchanged.

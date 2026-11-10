@@ -723,11 +723,9 @@ export default class RecruitmentService {
             )}**`,
             `Profile snapshot saved: **${savedAge}**`,
         ];
-        if (application.coverageIssues.length)
-            values.push(`Coverage: ${application.coverageIssues.join(' ')}`);
-        if (application.evaluationReason) values.push(`Review: ${application.evaluationReason}`);
         if (application.deliveryIssue) values.push(`Notice: ${application.deliveryIssue}`);
-        if (application.decision?.note) values.push(application.decision.note);
+        if (application.decision?.note && application.status !== 'acceptance-sent')
+            values.push(application.decision.note);
         let color: 'Red' | 'Green' | 'Purple' = 'Purple';
         if (application.status === 'denied') color = 'Red';
         else if (application.status === 'acceptance-sent') color = 'Green';
