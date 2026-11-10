@@ -4,6 +4,7 @@
 
 -   Ben requires all completed changes to be committed and pushed to GitHub.
 -   Push project changes to the appropriate branch of `NumberSixDev/bridge` (`origin`).
+-   Authenticate as `NumberSixDev`. Do not use `Fixerq`; verify `gh api user --jq .login` before pushing.
 -   Keep `MiscGuild/bridge` as `upstream`; do not push project changes there.
 -   Verify relevant tests and the build before pushing. Confirm the remote branch contains the resulting commit.
 -   Never commit `.env`, `.minecraft-auth/`, bot tokens or other credentials.
