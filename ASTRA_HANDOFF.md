@@ -116,3 +116,8 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards an
 -   37 offline tests cover formatting, boundary comparisons, missing/private/partial/stale evidence and refreshing reports without sending commands.
 
 -   Application cards omit the verbose Coverage and Review lines and the acceptance-confirmation footnote at Ben’s request. The concise requirement report, status and operational notices remain; underlying eligibility checks and saved evidence are unchanged.
+
+## Application role notifications, 10 November 2026
+
+-   Source `e931656` pushed to NumberSixDev and deployed through the existing Mac LaunchAgent. Local `RECRUITMENT_PING_ROLE_ID` is configured to the requested Applications role. New cards include the role mention as normal message text above their embed, with only that role allowed; edits preserve the original text and cannot ping again. Blank configuration disables mentions.
+-   Build and all75 offline tests, formatting/lint and configuration passed. Discord role/channel permissions verified read-only. The restarted bot reconnected and verified87 guild members. Ben requested a live test; a clearly labelled test embed was sent in the applications channel and Discord readback confirmed its role mention and embed. No membership action was performed.
