@@ -18,6 +18,7 @@ import {
 import path from 'node:path';
 import winston from 'winston';
 import env from '@util/env';
+import isStaffCommandChannel from '@util/staff-command-channel';
 import { formatAmount } from '../recruitment/amount';
 import { RecruitmentSettings } from '../recruitment/types';
 import {
@@ -444,7 +445,8 @@ export default class PurgeService {
 
     public constructor(options: PurgeServiceOptions) {
         this.getSettings = options.getSettings;
-        this.authorise = options.authoriseInteraction;
+        this.authorise = async (interaction) =>
+            isStaffCommandChannel(interaction) && options.authoriseInteraction(interaction);
         this.getSnapshot = options.getSnapshot;
         this.getRoster = options.getRoster;
         this.lookupFresh = options.lookupFresh;

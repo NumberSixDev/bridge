@@ -3,6 +3,7 @@ declare interface Command {
     run: ExecuteCommand;
     staffOnly?: boolean;
     recruitmentOnly?: boolean;
+    staffChannelOnly?: boolean;
 }
 
 type ExecuteCommand = (

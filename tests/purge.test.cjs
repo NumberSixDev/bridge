@@ -10,6 +10,7 @@ Object.assign(process.env, {
     DISCORD_TOKEN: 'test-token',
     DISCORD_SERVER_ID: '12345678901234567',
     MEMBER_CHANNEL_ID: '12345678901234568',
+    STAFF_COMMAND_CHANNEL_ID: '12345678901234568',
     BOT_OWNER_ID: '',
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
@@ -545,6 +546,28 @@ test('purge skips newly compliant targets, never adds newcomers and stops after 
         );
         assert.ok(h.state.members.includes('Newcomer'));
     } finally {
+        h.service.stop();
+    }
+});
+
+test('purge independently rejects commands and controls outside the staff channel', async () => {
+    const h = await harness();
+    try {
+        const denied = fakeCommand();
+        denied.channelId = '99999999999999999';
+        await h.service.handleCommand(denied);
+        assert.match(denied.calls.at(-1)[1].content, /permission/);
+        const prepared = await h.prepare();
+        const confirmation = await h.click(prepared.payload, 'confirm', {
+            channelId: '99999999999999999',
+        });
+        assert.match(confirmation.calls.at(-1)[1].content, /permission/);
+        // Changing the allowed channel invalidates an existing confirmation too.
+        runtimeEnv.STAFF_COMMAND_CHANNEL_ID = '99999999999999999';
+        await h.click(prepared.payload, 'confirm');
+        assert.deepEqual(h.kicks(), []);
+    } finally {
+        runtimeEnv.STAFF_COMMAND_CHANNEL_ID = '12345678901234568';
         h.service.stop();
     }
 });

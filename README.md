@@ -62,6 +62,7 @@ Edit the local `.env` file:
 | `DISCORD_TOKEN`                | Discord bot token                                                                                   |
 | `DISCORD_SERVER_ID`            | The Discord server ID                                                                               |
 | `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                                                                    |
+| `STAFF_COMMAND_CHANNEL_ID`     | Only channel for staff/admin commands and management controls; default `1569792569418977330`        |
 | `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment                                                 |
 | `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel                                        |
 | `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                                                       |
@@ -98,11 +99,11 @@ already includes purse and is never increased a second time by the bridge.
 Automatic acceptance is disabled by default; manual applications are enabled. The two roles in
 `RECRUITMENT_ALLOWED_ROLE_IDS` can use `/recruitment panel`,
 `/recruitment requirements`, `/recruitment auto` and `/recruitment status`.
-Run `/recruitment panel` in the text channel where you want recruitment managed.
+Run `/recruitment panel` in `STAFF_COMMAND_CHANNEL_ID`.
 It posts the settings embed only when this command is run. It is never created on startup.
 Applications always use the separate `RECRUITMENT_CHANNEL_ID` (or `MEMBER_CHANNEL_ID` if unset);
 posting the settings panel somewhere else does not change the application destination.
-Running it in another channel moves the panel and disables the old panel’s controls.
+Settings controls outside the staff command channel are rejected, including old panels and modals.
 Existing applications retain their original cards. The command reply links directly to the panel.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
@@ -189,6 +190,14 @@ command; a missing post-command roster confirmation stops the remaining job.
 `/help` is public. `/command`, `/slowmode` and `/terminate` require the configured
 `BOT_OWNER_ID` or `STAFF_ROLE_ID`; both can stay blank to deny everyone access.
 All commands are registered only in the configured Discord server.
+
+`/command`, `/slowmode`, `/terminate`, `/recruitment` and `/purge` can only run in
+`STAFF_COMMAND_CHANNEL_ID` (default `1569792569418977330`). Purge controls and
+recruitment settings buttons/forms have the same restriction. Attempts elsewhere
+receive a private reply linking to the allowed channel. Role checks still apply
+inside that channel. Application Accept/Deny buttons remain on their original
+application cards, and public `/help`, `/gleaderboard` and `/refresh` stay available
+in other channels.
 
 `/command` reports that a command was sent, not whether DragSim accepted it.
 `/terminate` stops the current session; a process supervisor may restart it.

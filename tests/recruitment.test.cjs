@@ -9,6 +9,7 @@ Object.assign(process.env, {
     DISCORD_TOKEN: 'test-token',
     DISCORD_SERVER_ID: '12345678901234567',
     MEMBER_CHANNEL_ID: '12345678901234568',
+    STAFF_COMMAND_CHANNEL_ID: '12345678901234568',
     BOT_OWNER_ID: '',
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
@@ -575,7 +576,7 @@ test('missing, private, stale, uncertain or malformed data always remains manual
         assert.equal(evaluateEligibility(evidence(invalid), settings, NOW).eligible, false);
 });
 
-test('panel follows the invoking channel while applications keep their separately configured channel', async () => {
+test('panel can move only to the configured staff channel while applications keep their destination', async () => {
     const h = makeService();
     const other = new FakeChannel();
     other.id = '99999999999999999';
@@ -584,20 +585,39 @@ test('panel follows the invoking channel while applications keep their separatel
     await fakeInteraction(h, { type: 'command', subcommand: 'panel' }).run();
     const oldMessage = h.channel.messagesById.get(h.service.settings.panelMessageId);
     await fakeInteraction(h, { type: 'command', subcommand: 'panel', channelId: other.id }).run();
-    assert.equal(h.service.settings.panelChannelId, other.id);
-    assert.deepEqual(oldMessage.payload.components, []);
-    const newMessage = other.messagesById.get(h.service.settings.panelMessageId);
-    const edit = fakeInteraction(h, {
-        customId: 'recruitment:panel:edit',
-        channelId: other.id,
-        message: newMessage,
-    });
-    await edit.run();
-    assert.ok(edit.result.shownModal);
-    await h.service.handleJoinRequest('Applicant');
-    const application = h.store.snapshot().applications[0];
-    assert.equal(application.channelId, h.channel.id);
-    assert.ok(h.channel.messagesById.has(application.messageId));
+    assert.equal(h.service.settings.panelChannelId, h.channel.id);
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const originalChannel = runtimeEnv.STAFF_COMMAND_CHANNEL_ID;
+    try {
+        runtimeEnv.STAFF_COMMAND_CHANNEL_ID = other.id;
+        const oldControl = fakeInteraction(h, {
+            customId: 'recruitment:panel:edit',
+            message: oldMessage,
+        });
+        await oldControl.run();
+        assert.equal(oldControl.result.shownModal, null);
+        await fakeInteraction(h, {
+            type: 'command',
+            subcommand: 'panel',
+            channelId: other.id,
+        }).run();
+        assert.equal(h.service.settings.panelChannelId, other.id);
+        assert.deepEqual(oldMessage.payload.components, []);
+        const newMessage = other.messagesById.get(h.service.settings.panelMessageId);
+        const edit = fakeInteraction(h, {
+            customId: 'recruitment:panel:edit',
+            channelId: other.id,
+            message: newMessage,
+        });
+        await edit.run();
+        assert.ok(edit.result.shownModal);
+        await h.service.handleJoinRequest('Applicant');
+        const application = h.store.snapshot().applications[0];
+        assert.equal(application.channelId, h.channel.id);
+        assert.ok(h.channel.messagesById.has(application.messageId));
+    } finally {
+        runtimeEnv.STAFF_COMMAND_CHANNEL_ID = originalChannel;
+    }
 });
 
 test('startup and settings changes never create a panel before the panel command', async () => {

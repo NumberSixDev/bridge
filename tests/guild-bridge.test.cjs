@@ -7,6 +7,7 @@ Object.assign(process.env, {
     DISCORD_TOKEN: 'test-token',
     DISCORD_SERVER_ID: '12345678901234567',
     MEMBER_CHANNEL_ID: '12345678901234568',
+    STAFF_COMMAND_CHANNEL_ID: '12345678901234568',
     BOT_OWNER_ID: '',
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
@@ -300,6 +301,7 @@ test('staff commands are denied when staff IDs are blank and async errors are ca
     const interaction = (name) => ({
         commandName: name,
         guildId: '12345678901234567',
+        channelId: '12345678901234568',
         user: { id: '99999999999999999' },
         member: { roles: { cache: { has: (id) => id !== '' } } },
         options: { data: [] },

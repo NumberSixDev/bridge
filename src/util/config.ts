@@ -83,6 +83,7 @@ export const envSchema = z
         DISCORD_IGNORE_PREFIX: z.string().trim().min(1).default(')'),
         DISCORD_SERVER_ID: snowflake,
         MEMBER_CHANNEL_ID: snowflake,
+        STAFF_COMMAND_CHANNEL_ID: snowflake.default('1569792569418977330'),
         BOT_OWNER_ID: optionalSnowflake,
         STAFF_ROLE_ID: optionalSnowflake,
     })

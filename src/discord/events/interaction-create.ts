@@ -1,6 +1,7 @@
 import { ApplicationCommandOptionType, EmbedBuilder, Interaction } from 'discord.js';
 import winston from 'winston';
 import env from '@util/env';
+import isStaffCommandChannel from '@util/staff-command-channel';
 
 export default {
     name: 'interactionCreate',
@@ -25,6 +26,17 @@ export default {
             typeof interaction.isStringSelectMenu === 'function' &&
             interaction.isStringSelectMenu();
         if (isButton || isModalSubmit || isStringSelectMenu) {
+            const restrictedControl =
+                bridge.purge?.ownsInteraction(interaction) ||
+                (bridge.recruitment?.ownsInteraction(interaction) &&
+                    !interaction.customId.startsWith('recruitment:application:'));
+            if (restrictedControl && !isStaffCommandChannel(interaction)) {
+                await interaction.reply({
+                    content: `Use staff controls in <#${env.STAFF_COMMAND_CHANNEL_ID}>. Run the command there to open a new panel.`,
+                    ephemeral: true,
+                });
+                return;
+            }
             if (isButton && bridge.leaderboard?.ownsInteraction(interaction)) {
                 try {
                     await bridge.leaderboard.handleInteraction(interaction);
@@ -84,6 +96,16 @@ export default {
         if (!interaction.isChatInputCommand()) return;
         const command = bridge.discord.commands.get(interaction.commandName);
         if (!command) return;
+        if (
+            (command.staffOnly || command.recruitmentOnly || command.staffChannelOnly) &&
+            !isStaffCommandChannel(interaction)
+        ) {
+            await interaction.reply({
+                content: `Use this command in <#${env.STAFF_COMMAND_CHANNEL_ID}>.`,
+                ephemeral: true,
+            });
+            return;
+        }
         try {
             if (
                 command.recruitmentOnly &&
