@@ -42,3 +42,10 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards an
 -   Application cards and settings summaries use lowercase k/m/b/t with up to two decimal places, truncated to match Ben’s examples (1,217,130,121.333 -> 1.21b; 5,812,272 -> 5.81m). Stored amounts and comparisons remain full precision.
 -   Minimum fields accept case-insensitive suffixes including 15b, 100m, 250k and 2t; both modal fields have examples.
 -   Release `19089a2b561d9207a783ede2e888fb85eb333cd5` is pushed and deployed. All 34 tests, formatting/lint and config validation pass. Existing application cards were refreshed and compact values read back from Discord; the bot reconnected successfully.
+
+## Application requirement report
+
+-   Display removes Minecraft profile colour/format codes (for example §7Wise becomes Wise).
+-   A concise report at the top compares each amount with the current minimum, then suggests Accept, below-minimum manual review, data verification or setting the minimums. Advice is independent of the auto-accept switch and never performs a decision.
+-   Open cards refresh their report when minimums change. Saved settings and full-precision comparisons are preserved.
+-   37 offline tests cover formatting, boundary comparisons, missing/private/partial/stale evidence and refreshing reports without sending commands.

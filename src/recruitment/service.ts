@@ -6,6 +6,7 @@ import {
     ButtonStyle,
     ChatInputCommandInteraction,
     EmbedBuilder,
+    escapeMarkdown,
     Message,
     ModalBuilder,
     ModalSubmitInteraction,
@@ -19,6 +20,7 @@ import env from '@util/env';
 import { parseAmount, formatAmount } from './amount';
 import { DragSimLookupClient } from './api';
 import { evaluateEligibility } from './policy';
+import { applicationReport, cleanProfileName } from './presentation';
 import { FileRecruitmentStore } from './store';
 import {
     ApplicationRecord,
@@ -333,6 +335,12 @@ export default class RecruitmentService {
             await this.persist();
         });
         await this.syncPanel(false);
+        // Update advice on open applications without making any admission decision.
+        Promise.all(
+            this.state.applications
+                .filter((application) => application.status === 'pending')
+                .map((application) => this.deliverApplicationCard(application.id))
+        ).catch((error: unknown) => winston.warn('Application report refresh failed:', error));
     }
 
     public async setAutoEnabled(enabled: boolean) {
@@ -694,12 +702,13 @@ export default class RecruitmentService {
     }
 
     // Payload construction is kept beside the application interaction handlers.
-    // eslint-disable-next-line class-methods-use-this
     private applicationPayload(application: ApplicationRecord) {
         const savedAge = application.profileSavedAt
             ? `<t:${Math.floor(application.profileSavedAt / 1000)}:R>`
             : 'Unknown';
         const values = [
+            ...applicationReport(application, this.state.settings, this.now()),
+            '',
             `Status: **${statusLabel(application)}**`,
             `Estimated networth (includes purse): **${
                 application.networth === undefined
@@ -709,7 +718,9 @@ export default class RecruitmentService {
             `Purse: **${
                 application.purse === undefined ? 'Unavailable' : formatAmount(application.purse)
             }**`,
-            `Profile: **${application.profileName ?? application.profileId ?? 'Unknown'}**`,
+            `Profile: **${escapeMarkdown(
+                cleanProfileName(application.profileName, application.profileId)
+            )}**`,
             `Profile snapshot saved: **${savedAge}**`,
         ];
         if (application.coverageIssues.length)
