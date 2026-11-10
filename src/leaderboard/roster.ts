@@ -66,7 +66,7 @@ function removeRankTags(value: string) {
 export function extractGuildListUsernames(value: string) {
     const clean = stripMinecraftFormatting(value).trim();
     if (!clean || /^Guild\s*(?:>|»)/u.test(clean)) return [];
-    const segments = clean.split(/\s*•\s*/u);
+    const segments = clean.split(/\s*[•●]\s*/u);
     const names: string[] = [];
     for (const segment of segments) {
         const candidate = removeRankTags(segment);
@@ -259,6 +259,11 @@ export class GuildRosterCollector {
         this.cache = undefined;
         const error = new Error(message);
         pending.reject(error);
-        winston.debug(`Guild roster request failed: ${message}`);
+        const counts = [...pending.groups]
+            .map(([group, state]) => `${group} ${state.members.length}/${state.expected}`)
+            .join(', ');
+        winston.warn(
+            `Guild roster request failed: ${message} Received ${counts || 'no rank groups'}.`
+        );
     }
 }

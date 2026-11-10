@@ -145,8 +145,9 @@ export default class LeaderboardService {
         if (this.stopped) return;
         await this.roster.getRoster().catch((error: unknown) => {
             winston.warn(
-                'Initial guild leaderboard roster refresh failed:',
-                error instanceof Error ? error.message : error
+                `Initial guild leaderboard roster refresh failed: ${
+                    error instanceof Error ? error.message : error
+                }`
             );
         });
     }

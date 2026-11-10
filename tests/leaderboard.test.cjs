@@ -336,6 +336,11 @@ test('leaderboard rank labels preserve plus ranks and do not invent a rank for d
 });
 
 test('roster parser rejects a whole chat-like line containing bullets and handles hex colours', () => {
+    assert.deepEqual(extractGuildListUsernames('First ● [DRAGON] Second ● Third'), [
+        'First',
+        'Second',
+        'Third',
+    ]);
     assert.deepEqual(extractGuildListUsernames('[VIP] Other: hello • FakeMember'), []);
     assert.deepEqual(extractGuildListUsernames('[VIP] Name extra • FakeMember'), []);
     assert.deepEqual(extractGuildListUsernames('§x§1§2§3§4§5§6[MOD] Member • [VIP+] Other •'), [
