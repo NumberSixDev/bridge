@@ -1,5 +1,7 @@
 /* eslint-disable no-console */
 const { config } = require('dotenv');
+// The compiled path is created by the build immediately before this script runs.
+// eslint-disable-next-line import/no-unresolved, import/extensions
 const { envSchema } = require('../dist/src/util/config');
 
 config({ quiet: true });

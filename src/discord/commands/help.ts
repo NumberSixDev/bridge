@@ -9,7 +9,10 @@ export default {
         const embed = new EmbedBuilder().setColor('Purple').setTitle('Commands');
 
         bridge.discord.commands.forEach((command) => {
-            embed.addFields({ name: command.data.name, value: command.data.description });
+            embed.addFields({
+                name: command.data.name,
+                value: command.data.description ?? 'No description.',
+            });
         });
 
         await interaction.reply({ embeds: [embed] });

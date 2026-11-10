@@ -1,57 +1,35 @@
-# DragSim Mac setup
+# Guild Bridge recruitment
 
-Updated: 10 November 2026. Status: running and verified live.
+Updated 10 November 2026. Status: IMPLEMENTED LOCALLY; release/live check in progress.
 
 ## Target and authority
 
--   Project: `/Users/ben/Documents/ChatGPT/Guild Bridge`. Keep this existing project and chat.
--   Branch: `feat/dragsim-guild-chat`; `origin`: `NumberSixDev/bridge`; `upstream`: `MiscGuild/bridge`.
--   Authenticate as `NumberSixDev`, never `Fixerq`. Commit and push completed project changes to the feature branch.
--   Keep credentials in the ignored `.env` and `.minecraft-auth/`; never print or commit them.
--   Ben approved automatic startup at Mac login on 10 November 2026. Sleep settings were not changed.
+-   Existing checkout `/Users/ben/Documents/ChatGPT/Guild Bridge`, branch `feat/dragsim-guild-chat`.
+-   origin NumberSixDev/bridge; upstream MiscGuild/bridge. Authenticate as NumberSixDev, never Fixerq. Commit/push all finished changes; never credentials, auth caches or `.bridge-data/`.
+-   Ben authorised this recruitment implementation and normal live delivery. Auto-accept must start OFF, thresholds unset. Admin role 1569762077592125510 and Guild Master role 1569548424884387850 exclusively control recruitment.
+-   Use existing guild-bridge channel. No new startup or sleep changes.
 
-## Current runtime
+## Implemented
 
--   Bot account: `LabGeek2`; Ben reports it has the guild's `BRIDGE` rank.
--   DragSim `dragsim.co:25565` accepts Minecraft `1.21.4` in the verified live connection.
--   Node.js `22.22.3`, pnpm `11.1.2`; frozen-lockfile dependencies installed.
--   Local credentials, Discord channel/server IDs and optional owner/staff IDs are configured. Reminders remain disabled.
--   Ben authorised auto-accepting every genuine guild join request. Local `GUILD_AUTO_ACCEPT_ENABLED=true`; new installations default to `false`.
--   Microsoft sign-in is cached locally. `.env` mode is `0600`; `.minecraft-auth/` mode is `0700`. No Windows cache was imported.
--   Supervisor: user LaunchAgent `com.numbersixdev.dragsim-guild-bridge`, installed at `/Users/ben/Library/LaunchAgents/com.numbersixdev.dragsim-guild-bridge.plist`.
--   It runs the checkout's `dist/src/index.js` at login and restarts the process after exit. PM2 is not running this bot.
--   Operational commands are in `README.md`. Logs: `logs/launchd.log`, `logs/launchd-error.log`, and `logs/error.log`.
--   The Mac already has sleep disabled on mains power; that existing setting was preserved.
+-   Official HTTPS profile and per-player networth lookups, selected-profile identity checks, privacy/freshness/coverage checks, bounded serial fetches. Networth already includes purse.
+-   Exact join notices create persistent application cards with Accept/Deny. Both minimums must be met with complete current data for automatic acceptance. Other requests stay manual. No automatic rejection.
+-   `/recruitment panel`, `/recruitment requirements`, `/recruitment auto`, `/recruitment status`; Edit minimums modal and explicit idempotent Enable/Disable buttons.
+-   Fresh role checks on commands/buttons/modals, channel and persisted message checks, early interaction deferral, suppressed mention notifications.
+-   Atomic private JSON state, serialized decisions/cards, restart recovery, bounded retries, repeated-request suppression and no old accept-all bypass. Settings changes during lookup keep those requests manual.
+-   Acceptance is labelled sent, not confirmed membership. Deny closes the application locally; live `/g help` lists acceptance but no decline command. No guessed denial command is used.
+-   Existing resource-pack UUID acknowledgement, hub readiness gating, reconnects, rank parsing and chat relay preserved.
 
-## Connection fixes
+## Evidence
 
--   DragSim sends a resource pack during protocol configuration. The bridge acknowledges its exact raw UUID, avoiding Mineflayer 4.37.1 issue #4043.
--   New connections land in a profile selector where guild sends are rejected. Local `MINECRAFT_JOIN_COMMAND=/warp hub` is now configured; the bridge waits for the hub spawn before announcing readiness.
--   The join step runs after reconnects too. A transfer timeout reconnects rather than falsely announcing readiness.
--   Disconnect reasons are visible in logs. Formatting excludes local authentication files.
--   Guild parsing supports optional server-rank prefixes and optional guild-role suffixes. All bracketed tags are preserved, including multiple or previously unknown tags; untagged players and own-echo suppression remain supported.
--   Auto-accept recognises only `Guild » <username> has requested to join your guild!` and sends `/g accept <username>`. Player quotes and invalid usernames are excluded. Per-user duplicate suppression lasts 60 seconds; requests waiting for hub readiness also expire after 60 seconds.
--   The acceptance log records a sent command, not confirmed membership. LabGeek2's guild role must be permitted to accept requests.
+-   Live HTTP200 profile, official networth and external price-service checks succeeded. Runtime uses only the official HTTPS endpoints. Completed client verified live for two owned accounts: identity, purse and networth available; both valuations partial and therefore manual.
+-   30 offline tests pass, plus build, formatting/lint and configuration validation. Includes exact API paths, both thresholds, bad/missing/stale/private/partial data, role isolation, settings modal/buttons, concurrency, disconnection, persistence failure, restart recovery and Discord delivery retry.
+-   Admin/Guild Master roles and existing guild-bridge channel verified via Discord API.
+-   Existing accept-everyone mode was disabled locally before implementation. Old supervised service was reconnected successfully.
+-   Delegated execution stopped at its 20-minute deadline; no child remains. Owner corrected API route, recovery/decision races and completed additional tests. No unfinished delegated changes remain.
 
-## Verification
+## Runtime and remaining verification
 
--   `pnpm test`: build and all fourteen offline tests passed, including resource-pack wire UUIDs, hub readiness gating, 120 prefix/suffix combinations and the complete auto-accept event route.
--   Auto-accept tests cover default-off behaviour, quoting/spoof rejection, valid arbitrary usernames, duplicate suppression, readiness queuing, stale-request expiry, stopped state and command failures.
--   VERIFIED LIVE: the service observed a genuine request and logged the automatic `/g accept` command. Ben confirmed the requester joined without manual acceptance, then reported multiple further successful joins. The bot's acceptance permission and end-to-end behaviour are confirmed.
--   `pnpm format:check`: formatting and lint passed.
--   `pnpm check-config`: passed.
--   Discord intent/channel permission checks passed; the configured staff role exists.
--   Live Discord-to-Minecraft test: received by the bot, emitted as `/gc`, and observed in actual server guild chat.
--   Live Minecraft-to-Discord test: received in guild chat and delivered once to the configured Discord channel.
--   After the parser update and service restart, Discord readback confirmed a real `[MOD] DragSim [GM]` guild message, preserving both server rank and guild role.
--   Discord readback confirmed the original message remains, one incoming guild copy, zero own-echo duplicates, and zero messages from the tested other channel.
--   A controlled network drop triggered the 15-second reconnect, resource-pack acknowledgement and automatic hub entry.
--   A controlled supervised process stop produced a new process and a fresh successful DragSim connection. Both error logs were empty afterwards.
--   Startup at login is installed and loaded; the Mac was not rebooted as part of testing.
--   The previously reported GitHub Actions billing lock was not changed; local and live checks supply the verification evidence.
-
-## Operational constraints
-
--   Leave the bot account disconnected from the Minecraft game client while the bridge runs. Concurrent use causes DragSim's `You are already connected to this proxy!` rejection.
--   Use the LaunchAgent commands to stop or restart this Mac's service; starting another copy with pnpm or PM2 would duplicate the account session.
--   Keep the Mac powered on, logged in, connected and awake. Core chat setup and auto-accept are complete and verified live.
+-   Node22.22.3, pnpm11.1.2, Minecraft1.21.4 as LabGeek2; native LaunchAgent `com.numbersixdev.dragsim-guild-bridge` runs `dist/src/index.js`. PM2 unused.
+-   Credentials remain private in .env/.minecraft-auth. Never sign the Minecraft bot account into another client.
+-   Pending: scoped commit/push, supervised restart, slash registration and live application/panel readback. Real admin button/admission proof may require Ben.
+-   macOS CUA screen capture failed (SCStreamError -3811); no successful Discord UI test is claimed. Discord API is working.

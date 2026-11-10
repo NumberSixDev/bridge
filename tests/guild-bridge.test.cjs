@@ -93,77 +93,19 @@ test('join notices match only the exact server announcement and a valid username
     }
 });
 
-test('auto-accept is opt-in, handles real event routing and deduplicates each username for a minute', async () => {
+test('the legacy auto-accept environment flag cannot bypass recruitment', async () => {
     const runtimeEnv = require('../dist/src/util/env.js').default;
     const originalEnabled = runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED;
-    const originalNow = Date.now;
-    let now = 1_000;
-    Date.now = () => now;
     const harness = await createJoinRequestHarness();
     try {
         await harness.spawn();
-        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = false;
-        await harness.receive('Guild » Eletc has requested to join your guild!');
-        assert.deepEqual(harness.bot.chats, []);
         runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = true;
-        await harness.receive('Guild > LabGeek: Guild » Eletc has requested to join your guild!');
-        assert.deepEqual(harness.bot.chats, [], 'quoted player chat must not accept anyone');
-        await harness.receive('Guild » Eletc has requested to join your guild!');
-        await harness.receive('Guild » ELETC has requested to join your guild!');
-        await harness.receive('Guild » Another_Player has requested to join your guild!');
-        assert.deepEqual(harness.bot.chats, ['/g accept Eletc', '/g accept Another_Player']);
-        now += 60_000;
-        await harness.receive('Guild » Eletc has requested to join your guild!');
-        assert.equal(harness.bot.chats.at(-1), '/g accept Eletc');
-        assert.equal(harness.bot.chats.length, 3);
-        for (const username of ['Eletc\n', 'Eletc /g disband', 'Eletc\n/g disband']) {
-            assert.throws(
-                () => harness.mineflayer.acceptGuildJoinRequest(username),
-                /valid Minecraft username/
-            );
-        }
-        harness.mineflayer.stop();
-        assert.equal(harness.mineflayer.acceptGuildJoinRequest('NewPlayer'), false);
-        assert.equal(harness.bot.chats.length, 3);
-    } finally {
-        harness.mineflayer.stop();
-        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = originalEnabled;
-        Date.now = originalNow;
-    }
-});
-
-test('requests wait for readiness, expire while offline and can retry a failed command', async () => {
-    const runtimeEnv = require('../dist/src/util/env.js').default;
-    const originalEnabled = runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED;
-    const originalNow = Date.now;
-    let now = 1_000;
-    Date.now = () => now;
-    runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = true;
-    const harness = await createJoinRequestHarness();
-    try {
-        harness.mineflayer.acceptGuildJoinRequest('StalePlayer');
-        now += 59_000;
-        harness.mineflayer.acceptGuildJoinRequest('Eletc');
-        harness.mineflayer.acceptGuildJoinRequest('ELETC');
-        now += 1_001;
+        assert.equal(harness.mineflayer.isReady, true);
+        assert.equal('acceptGuildJoinRequest' in harness.mineflayer, false);
         assert.deepEqual(harness.bot.chats, []);
-        await harness.spawn();
-        assert.deepEqual(harness.bot.chats, ['/g accept Eletc']);
-        const chat = harness.bot.chat;
-        harness.bot.chat = () => {
-            throw new Error('send failed');
-        };
-        assert.throws(
-            () => harness.mineflayer.acceptGuildJoinRequest('RetryPlayer'),
-            /send failed/
-        );
-        harness.bot.chat = chat;
-        assert.equal(harness.mineflayer.acceptGuildJoinRequest('RetryPlayer'), true);
-        assert.deepEqual(harness.bot.chats, ['/g accept Eletc', '/g accept RetryPlayer']);
     } finally {
         harness.mineflayer.stop();
         runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = originalEnabled;
-        Date.now = originalNow;
     }
 });
 

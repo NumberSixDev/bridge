@@ -2,6 +2,7 @@ declare interface Command {
     data: import('discord.js').ChatInputApplicationCommandData;
     run: ExecuteCommand;
     staffOnly?: boolean;
+    recruitmentOnly?: boolean;
 }
 
 type ExecuteCommand = (

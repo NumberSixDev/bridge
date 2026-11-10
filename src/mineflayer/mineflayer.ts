@@ -13,16 +13,15 @@ export default class Mineflayer {
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
     private joinTimer?: NodeJS.Timeout;
-    private readonly recentGuildAccepts = new Map<string, number>();
-    private readonly pendingGuildRequests = new Map<
-        string,
-        { username: string; expiresAt: number }
-    >();
 
     constructor(private readonly createClient: typeof createBot = createBot) {}
 
     public get username() {
         return this.bot?.username;
+    }
+
+    public get isReady() {
+        return this.ready && !this.stopping && Boolean(this.bot);
     }
 
     public async connect(bridge: Bridge) {
@@ -119,12 +118,8 @@ export default class Mineflayer {
     private async onReady(bot: Bot, bridge: Bridge) {
         if (this.bot !== bot || this.stopping) return;
         this.ready = true;
-        this.pendingGuildRequests.forEach(({ username, expiresAt }, key) => {
-            if (expiresAt > Date.now()) this.acceptGuildJoinRequest(username);
-            else this.pendingGuildRequests.delete(key);
-        });
         winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
-        if (env.GUILD_AUTO_ACCEPT_ENABLED) winston.info('Automatic guild acceptance is enabled.');
+        await bridge.recruitment?.onMinecraftReady();
         await bridge.discord.send('The DragSim guild bridge is connected.');
         if (this.bot !== bot || this.stopping) return;
         if (env.REMINDER_ENABLED) {
@@ -140,34 +135,6 @@ export default class Mineflayer {
 
     public chat(message: string) {
         return this.execute(guildCommand(env.MINECRAFT_CHAT_COMMAND, message));
-    }
-
-    public acceptGuildJoinRequest(username: string) {
-        if (!env.GUILD_AUTO_ACCEPT_ENABLED || this.stopping) return false;
-        if (!/^[A-Za-z0-9_]{1,16}$/.test(username) || username !== singleLine(username)) {
-            throw new Error('A guild join request must contain one valid Minecraft username.');
-        }
-        const now = Date.now();
-        this.recentGuildAccepts.forEach((expiresAt, key) => {
-            if (expiresAt <= now) this.recentGuildAccepts.delete(key);
-        });
-        this.pendingGuildRequests.forEach(({ expiresAt }, key) => {
-            if (expiresAt <= now) this.pendingGuildRequests.delete(key);
-        });
-        const key = username.toLowerCase();
-        if (this.recentGuildAccepts.has(key)) return false;
-        if (!this.ready || !this.bot) {
-            if (!this.pendingGuildRequests.has(key)) {
-                this.pendingGuildRequests.set(key, { username, expiresAt: now + 60_000 });
-            }
-            return false;
-        }
-        this.execute(`/g accept ${username}`);
-        this.recentGuildAccepts.set(key, now + 60_000);
-        this.pendingGuildRequests.delete(key);
-        // Sending the command does not prove the server granted membership.
-        winston.info(`Sent guild acceptance command for ${username}.`);
-        return true;
     }
 
     public execute(message: string) {
@@ -186,7 +153,6 @@ export default class Mineflayer {
         this.reconnectTimer = undefined;
         clearInterval(this.reminderTimer);
         clearTimeout(this.joinTimer);
-        this.pendingGuildRequests.clear();
         this.bot?.quit('Bridge stopped');
     }
 }

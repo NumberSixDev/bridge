@@ -18,7 +18,9 @@
 -   Expected incoming format: `Guild > [DRAGON] LabGeek: .`.
 -   One Discord channel serves the whole guild, including officers and members.
 -   Hypixel-specific API, Limbo, officer-channel, blacklist and original guild-administration behaviour is not used.
--   Ben authorised DragSim auto-accept: only the exact `Guild » <username> has requested to join your guild!` notice may trigger `/g accept <username>`, and only when `GUILD_AUTO_ACCEPT_ENABLED=true`.
+-   Recruitment uses the exact `Guild » <username> has requested to join your guild!` notice. Automatic acceptance defaults off, requires both minimums and complete fresh API evidence, and is controlled by the persistent Discord settings panel. The legacy `GUILD_AUTO_ACCEPT_ENABLED` flag is inert.
+-   Only the configured Admin and Guild Master roles may operate recruitment commands, buttons or modals. Every interaction rechecks roles and server/message scope.
+-   Recruitment state stays in the ignored `.bridge-data/` directory. Never commit player applications or inventories. Deny is a local decision; no server decline command has been verified.
 -   Credentials are configured locally. The approved Mac LaunchAgent runs the bot; stop or restart that service instead of creating a second account connection.
 
 ## Checks

@@ -3,6 +3,7 @@ import winston from 'winston';
 import env from '@util/env';
 import Discord from '@discord/discord';
 import Mineflayer from '@mineflayer/mineflayer';
+import RecruitmentService from './recruitment/service';
 
 export default class Bridge {
     public readonly discord = new Discord({
@@ -14,6 +15,11 @@ export default class Bridge {
         ],
     });
     public readonly mineflayer = new Mineflayer();
+    public readonly recruitment = new RecruitmentService({
+        getChannel: () => this.discord.memberChannel,
+        isMinecraftReady: () => this.mineflayer.isReady,
+        sendAcceptance: (username) => this.mineflayer.execute(`/g accept ${username}`),
+    });
 
     constructor() {
         this.start().catch((error: unknown) => {
@@ -26,6 +32,7 @@ export default class Bridge {
     }
 
     public stop() {
+        this.recruitment.stop();
         this.mineflayer.stop();
         this.discord.destroy();
     }

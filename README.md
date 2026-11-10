@@ -17,7 +17,8 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Disables Discord mention notifications in relayed messages.
 -   Rejects messages exceeding Minecraft's 256-character limit, including `/gc `, the author and separator.
 -   Reconnects after a connection ends and supports optional guild reminders.
--   Can automatically accept guild join requests when `GUILD_AUTO_ACCEPT_ENABLED=true`.
+-   Records guild join applications with profile summaries and persistent Accept/Deny controls.
+-   Supports a persistent recruitment settings panel with optional thresholded automatic acceptance.
 
 The original Hypixel API lookups, Limbo commands, member-count polling, guild
 moderation commands and blacklist integration have been removed. There is no
@@ -38,7 +39,7 @@ the first live connection; a proxy's advertised version may differ from its back
 
 ## Setup on the Mac
 
-Use a checkout of this fork containing the DragSim changes under `~/Projects/Guild Bridge`.
+Ben’s existing Mac checkout is `/Users/ben/Documents/ChatGPT/Guild Bridge`. Use this checkout when operating the installed service.
 From that directory:
 
 ```sh
@@ -48,17 +49,20 @@ pnpm setup-files
 
 Edit the local `.env` file:
 
-| Setting                  | Value                                             |
-| ------------------------ | ------------------------------------------------- |
-| `MINECRAFT_HOST`         | `dragsim.co`                                      |
-| `MINECRAFT_PORT`         | `25565`                                           |
-| `MINECRAFT_VERSION`      | `1.21.4`, or another confirmed compatible version |
-| `MINECRAFT_CHAT_COMMAND` | `/gc`                                             |
-| `MINECRAFT_JOIN_COMMAND` | `/warp hub` to leave DragSim's profile selector   |
-| `MINECRAFT_EMAIL`        | Microsoft account email for the bot               |
-| `DISCORD_TOKEN`          | Discord bot token                                 |
-| `DISCORD_SERVER_ID`      | The Discord server ID                             |
-| `MEMBER_CHANNEL_ID`      | The single guild-chat channel ID                  |
+| Setting                        | Value                                                      |
+| ------------------------------ | ---------------------------------------------------------- |
+| `MINECRAFT_HOST`               | `dragsim.co`                                               |
+| `MINECRAFT_PORT`               | `25565`                                                    |
+| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version          |
+| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                      |
+| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector            |
+| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                        |
+| `DISCORD_TOKEN`                | Discord bot token                                          |
+| `DISCORD_SERVER_ID`            | The Discord server ID                                      |
+| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                           |
+| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment        |
+| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state              |
+| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/` |
 
 Keep credentials in `.env`. Microsoft tokens are stored locally in
 `.minecraft-auth/`. Both are ignored by Git. Do not copy personal authentication
@@ -78,21 +82,45 @@ Leave `REMINDER_ENABLED=false` unless reminders are wanted. Messages beginning
 with `DISCORD_IGNORE_PREFIX` are kept in Discord without being relayed. The
 optional profanity filter is a local filter, not a guarantee of server acceptance.
 
-## Automatic guild acceptance
+## Guild recruitment
 
-Set `GUILD_AUTO_ACCEPT_ENABLED=true` in the local `.env` and restart the bridge to
-accept everyone who requests to join. The template defaults to `false`. The
-bot's guild role must have permission to accept requests.
+The exact server notice `Guild » Eletc has requested to join your guild!` creates
+one persistent application. The application first fetches the player's selected
+profile and then the matching official networth snapshot. Private, stale, partial,
+uncertain or incomplete data always goes to manual review; the estimated networth
+already includes purse and is never increased a second time by the bridge.
 
-The exact server notice `Guild » Eletc has requested to join your guild!` triggers
-`/g accept Eletc`, using the actual requester's validated Minecraft username.
-Ordinary chat quoting that notice is ignored. Repeated notices for the same
-username are suppressed for 60 seconds, including across network reconnects.
-Requests received before the hub is ready wait for readiness and expire after
-60 seconds. No commands are sent while the bridge is stopped.
+Automatic acceptance is disabled by default; manual applications are enabled. The two roles in
+`RECRUITMENT_ALLOWED_ROLE_IDS` can use `/recruitment panel`,
+`/recruitment requirements`, `/recruitment auto` and `/recruitment status`.
+Run `/recruitment panel` to post or refresh the settings embed in `MEMBER_CHANNEL_ID`.
+Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
+when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
+The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto
+acceptance can be enabled, and comparisons are inclusive. A setting change does
+not retroactively accept existing applications.
 
-The local log records that the acceptance command was sent; that alone does not
-prove the server granted membership. Confirm the first live request succeeds.
+Automatic acceptance sends `/g accept <username>` only after both current
+thresholds pass, the Minecraft connection is ready and the decision has been
+persisted. `Acceptance sent` is not proof of server membership. Manual Deny is a
+local suppression only because the server's decline command is not verified; the
+bridge does not guess one. The legacy `GUILD_AUTO_ACCEPT_ENABLED` setting is
+retained only for configuration compatibility and cannot bypass recruitment.
+
+Settings and applications are stored locally in `.bridge-data/recruitment.json`
+(directory mode 0700, file mode 0600), excluded from Git and formatting. Pending
+applications and controls survive restart. Interrupted acceptance attempts are
+marked **Needs verification** and are never automatically resent. Duplicate
+notices are suppressed while pending and for 60 seconds after a decision. Closed
+records are retained for up to 30 days within a 1,000-application capacity.
+
+The bridge uses only `https://dragsim.co/api/player/<username>?mode=main` and
+`https://dragsim.co/api/networth/<username>?mode=main&profile=<id>`. No extra
+API key, external price service or AI API is needed. Both endpoints were checked
+live on 10 November 2026. Saved-profile, calculation and market timestamps must
+be within five minutes; missing, private, partial, unpriced or uncertain data goes
+to manual review. The sample profiles were partial, so a large displayed total
+alone is not sufficient for automatic admission. The panel explains this policy.
 
 ## Optional staff commands
 

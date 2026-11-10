@@ -75,6 +75,7 @@ history/
 .env
 .env.test
 .minecraft-auth/
+.bridge-data/
 
 # Blacklist file
 src/blacklist/_blacklist.json

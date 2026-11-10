@@ -3,6 +3,20 @@ import { z } from 'zod';
 const boolean = z.enum(['true', 'false']).transform((value) => value === 'true');
 const snowflake = z.string().regex(/^\d{17,20}$/);
 const optionalSnowflake = z.union([snowflake, z.literal('')]).default('');
+const recruitmentRoleIds = z
+    .string()
+    .default('1569762077592125510,1569548424884387850')
+    .transform((value) =>
+        value
+            .split(',')
+            .map((roleId) => roleId.trim())
+            .filter(Boolean)
+    )
+    .refine(
+        (roleIds) =>
+            roleIds.length > 0 && roleIds.every((roleId) => snowflake.safeParse(roleId).success),
+        'RECRUITMENT_ALLOWED_ROLE_IDS must be a comma-separated list of Discord role IDs'
+    );
 
 // Named export is shared by the offline setup checker and tests.
 // eslint-disable-next-line import/prefer-default-export
@@ -31,6 +45,18 @@ export const envSchema = z
         MINECRAFT_CHAT_SEPARATOR: z.string().trim().min(1).max(10).default('>'),
         USE_PROFANITY_FILTER: boolean.default(true),
         USE_FIRST_WORD_OF_AUTHOR_NAME: boolean.default(false),
+        RECRUITMENT_DATA_DIR: z.string().trim().min(1).default('.bridge-data'),
+        RECRUITMENT_API_BASE_URL: z
+            .string()
+            .url()
+            .refine(
+                (value) => new URL(value).protocol === 'https:',
+                'Recruitment API must use HTTPS'
+            )
+            .default('https://dragsim.co/api/'),
+        RECRUITMENT_ALLOWED_ROLE_IDS: recruitmentRoleIds,
+        // Retained for backwards-compatible configuration parsing only. It is no longer an
+        // acceptance switch; recruitment owns every guild join decision.
         GUILD_AUTO_ACCEPT_ENABLED: boolean.default(false),
         REMINDER_ENABLED: boolean.default(false),
         REMINDER_MESSAGE: z.string().default(''),

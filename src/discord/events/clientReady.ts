@@ -24,6 +24,7 @@ export default {
                 bridge.discord.commands.map((command) => command.data),
                 env.DISCORD_SERVER_ID
             );
+            await bridge.recruitment.onDiscordReady();
             bridge.discord.user!.setActivity('DragSim guild chat', { type: ActivityType.Watching });
             await bridge.mineflayer.connect(bridge);
         } catch (error) {
