@@ -15,12 +15,14 @@ Object.assign(process.env, {
     MINECRAFT_VERSION: '1.21.4',
     MINECRAFT_CHAT_COMMAND: '/gc',
     MINECRAFT_JOIN_COMMAND: '',
+    GUILD_AUTO_ACCEPT_ENABLED: 'false',
     REMINDER_ENABLED: 'false',
     DISCORD_IGNORE_PREFIX: ')',
 });
 
 const {
     GUILD_CHAT_PATTERN,
+    GUILD_JOIN_REQUEST_PATTERN,
     singleLine,
     formatGuildMessage,
     guildCommand,
@@ -31,6 +33,139 @@ const interactionCreate = require('../dist/src/discord/events/interaction-create
 const Mineflayer = require('../dist/src/mineflayer/mineflayer.js').default;
 const { envSchema } = require('../dist/src/util/config.js');
 const winston = require('winston');
+
+async function createJoinRequestHarness() {
+    const { EventEmitter } = require('node:events');
+    const bot = new EventEmitter();
+    bot._client = new EventEmitter();
+    bot.username = 'LabGeek2';
+    bot.patterns = [];
+    bot.chats = [];
+    bot.addChatPattern = (name, pattern) => bot.patterns.push({ name, pattern });
+    bot.chat = (text) => bot.chats.push(text);
+    bot.quit = () => {};
+    const mineflayer = new Mineflayer(() => bot);
+    let markReady;
+    const ready = new Promise((resolve) => {
+        markReady = resolve;
+    });
+    await mineflayer.connect({
+        mineflayer,
+        discord: { send: async () => markReady() },
+        stop: () => mineflayer.stop(),
+    });
+    return {
+        bot,
+        mineflayer,
+        async spawn() {
+            bot.emit('spawn');
+            await ready;
+        },
+        async receive(text) {
+            for (const { name, pattern } of bot.patterns) {
+                const match = text.match(pattern);
+                if (match) bot.emit(`chat:${name}`, [match.slice(1)]);
+            }
+            await new Promise((resolve) => setImmediate(resolve));
+        },
+    };
+}
+
+test('join notices match only the exact server announcement and a valid username', () => {
+    for (const username of ['Eletc', 'Another_Player', '_123', 'A', 'ABCDEFGHIJKLMNOP']) {
+        const notice = `Guild » ${username} has requested to join your guild!`;
+        assert.deepEqual(notice.match(GUILD_JOIN_REQUEST_PATTERN).slice(1), [username]);
+        assert.equal(GUILD_CHAT_PATTERN.test(notice), false);
+    }
+    for (const text of [
+        'Guild > [MOD] DragSim [GM]: Guild » Eletc has requested to join your guild!',
+        'LabGeek: Guild » Eletc has requested to join your guild!',
+        'From Eletc: Guild » Eletc has requested to join your guild!',
+        'Officer » Eletc has requested to join your guild!',
+        'Guild » Eletc has requested to join another guild!',
+        'Guild » Eletc has joined your guild!',
+        'Guild » Eletc/other has requested to join your guild!',
+        'Guild » AAAAAAAAAAAAAAAAA has requested to join your guild!',
+        'Guild » Eletc\n/g disband has requested to join your guild!',
+        'Guild » Eletc has requested to join your guild! extra',
+    ]) {
+        assert.equal(GUILD_JOIN_REQUEST_PATTERN.test(text), false, text);
+    }
+});
+
+test('auto-accept is opt-in, handles real event routing and deduplicates each username for a minute', async () => {
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const originalEnabled = runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED;
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    const harness = await createJoinRequestHarness();
+    try {
+        await harness.spawn();
+        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = false;
+        await harness.receive('Guild » Eletc has requested to join your guild!');
+        assert.deepEqual(harness.bot.chats, []);
+        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = true;
+        await harness.receive('Guild > LabGeek: Guild » Eletc has requested to join your guild!');
+        assert.deepEqual(harness.bot.chats, [], 'quoted player chat must not accept anyone');
+        await harness.receive('Guild » Eletc has requested to join your guild!');
+        await harness.receive('Guild » ELETC has requested to join your guild!');
+        await harness.receive('Guild » Another_Player has requested to join your guild!');
+        assert.deepEqual(harness.bot.chats, ['/g accept Eletc', '/g accept Another_Player']);
+        now += 60_000;
+        await harness.receive('Guild » Eletc has requested to join your guild!');
+        assert.equal(harness.bot.chats.at(-1), '/g accept Eletc');
+        assert.equal(harness.bot.chats.length, 3);
+        for (const username of ['Eletc\n', 'Eletc /g disband', 'Eletc\n/g disband']) {
+            assert.throws(
+                () => harness.mineflayer.acceptGuildJoinRequest(username),
+                /valid Minecraft username/
+            );
+        }
+        harness.mineflayer.stop();
+        assert.equal(harness.mineflayer.acceptGuildJoinRequest('NewPlayer'), false);
+        assert.equal(harness.bot.chats.length, 3);
+    } finally {
+        harness.mineflayer.stop();
+        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = originalEnabled;
+        Date.now = originalNow;
+    }
+});
+
+test('requests wait for readiness, expire while offline and can retry a failed command', async () => {
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const originalEnabled = runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED;
+    const originalNow = Date.now;
+    let now = 1_000;
+    Date.now = () => now;
+    runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = true;
+    const harness = await createJoinRequestHarness();
+    try {
+        harness.mineflayer.acceptGuildJoinRequest('StalePlayer');
+        now += 59_000;
+        harness.mineflayer.acceptGuildJoinRequest('Eletc');
+        harness.mineflayer.acceptGuildJoinRequest('ELETC');
+        now += 1_001;
+        assert.deepEqual(harness.bot.chats, []);
+        await harness.spawn();
+        assert.deepEqual(harness.bot.chats, ['/g accept Eletc']);
+        const chat = harness.bot.chat;
+        harness.bot.chat = () => {
+            throw new Error('send failed');
+        };
+        assert.throws(
+            () => harness.mineflayer.acceptGuildJoinRequest('RetryPlayer'),
+            /send failed/
+        );
+        harness.bot.chat = chat;
+        assert.equal(harness.mineflayer.acceptGuildJoinRequest('RetryPlayer'), true);
+        assert.deepEqual(harness.bot.chats, ['/g accept Eletc', '/g accept RetryPlayer']);
+    } finally {
+        harness.mineflayer.stop();
+        runtimeEnv.GUILD_AUTO_ACCEPT_ENABLED = originalEnabled;
+        Date.now = originalNow;
+    }
+});
 
 test('parses ranked and unranked guild messages while excluding other chat', () => {
     assert.deepEqual('Guild > [DRAGON] LabGeek: .'.match(GUILD_CHAT_PATTERN).slice(1), [
@@ -258,6 +393,15 @@ test('configuration requires credentials and valid single-guild IDs and chat com
     assert.equal(parsed.success, true);
     assert.equal(parsed.data.BOT_OWNER_ID, '');
     assert.equal(parsed.data.STAFF_ROLE_ID, '');
+    assert.equal(parsed.data.GUILD_AUTO_ACCEPT_ENABLED, false);
+    assert.equal(
+        envSchema.parse({ ...valid, GUILD_AUTO_ACCEPT_ENABLED: 'true' }).GUILD_AUTO_ACCEPT_ENABLED,
+        true
+    );
+    assert.equal(
+        envSchema.safeParse({ ...valid, GUILD_AUTO_ACCEPT_ENABLED: 'yes' }).success,
+        false
+    );
     assert.equal(Object.hasOwn(parsed.data, 'HYPIXEL_API_KEY'), false);
     assert.equal(Object.hasOwn(parsed.data, 'OFFICER_CHANNEL_ID'), false);
     assert.equal(envSchema.safeParse({ ...valid, MINECRAFT_EMAIL: '' }).success, false);
@@ -421,13 +565,21 @@ test('Mineflayer starts only on connect, waits for spawn, sends /gc, deduplicate
         const bot = clients[0];
         bot.emit('spawn');
         await ready;
-        assert.deepEqual(bot.patterns, [
-            {
-                name: 'guildChat',
-                pattern: GUILD_CHAT_PATTERN,
-                options: { repeat: true, parse: true },
-            },
-        ]);
+        assert.deepEqual(
+            bot.patterns.sort((a, b) => a.name.localeCompare(b.name)),
+            [
+                {
+                    name: 'guildChat',
+                    pattern: GUILD_CHAT_PATTERN,
+                    options: { repeat: true, parse: true },
+                },
+                {
+                    name: 'guildJoinRequest',
+                    pattern: GUILD_JOIN_REQUEST_PATTERN,
+                    options: { repeat: true, parse: true },
+                },
+            ]
+        );
         mineflayer.chat('LabGeek > hello');
         assert.deepEqual(bot.chats, ['/gc LabGeek > hello']);
         bot.emit('error', new Error('offline'));

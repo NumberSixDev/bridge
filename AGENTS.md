@@ -17,8 +17,9 @@
 -   Send guild messages using `/gc message`.
 -   Expected incoming format: `Guild > [DRAGON] LabGeek: .`.
 -   One Discord channel serves the whole guild, including officers and members.
--   Hypixel-specific API, Limbo, officer-channel, blacklist and guild-administration behaviour is not used.
--   The Minecraft account and Discord bot token are deliberately pending. Do not start a real connection until they are supplied.
+-   Hypixel-specific API, Limbo, officer-channel, blacklist and original guild-administration behaviour is not used.
+-   Ben authorised DragSim auto-accept: only the exact `Guild » <username> has requested to join your guild!` notice may trigger `/g accept <username>`, and only when `GUILD_AUTO_ACCEPT_ENABLED=true`.
+-   Credentials are configured locally. The approved Mac LaunchAgent runs the bot; stop or restart that service instead of creating a second account connection.
 
 ## Checks
 

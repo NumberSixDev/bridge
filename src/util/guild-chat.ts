@@ -6,6 +6,9 @@ export const GUILD_CHAT_PATTERN = new RegExp(
     String.raw`^Guild >[ \t]+(?:(${bracketedTags})[ \t]*)?([A-Za-z0-9_]{1,16})(?:[ \t]*(${bracketedTags}))?:[ \t]?(.*)$`
 );
 
+export const GUILD_JOIN_REQUEST_PATTERN =
+    /^Guild » ([A-Za-z0-9_]{1,16}) has requested to join your guild!$/;
+
 export const singleLine = (value: string) =>
     value
         .replace(/[\r\n\t]+/g, ' ')

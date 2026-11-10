@@ -17,6 +17,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Disables Discord mention notifications in relayed messages.
 -   Rejects messages exceeding Minecraft's 256-character limit, including `/gc `, the author and separator.
 -   Reconnects after a connection ends and supports optional guild reminders.
+-   Can automatically accept guild join requests when `GUILD_AUTO_ACCEPT_ENABLED=true`.
 
 The original Hypixel API lookups, Limbo commands, member-count polling, guild
 moderation commands and blacklist integration have been removed. There is no
@@ -76,6 +77,22 @@ only starts the Minecraft connection after checking the Discord channel.
 Leave `REMINDER_ENABLED=false` unless reminders are wanted. Messages beginning
 with `DISCORD_IGNORE_PREFIX` are kept in Discord without being relayed. The
 optional profanity filter is a local filter, not a guarantee of server acceptance.
+
+## Automatic guild acceptance
+
+Set `GUILD_AUTO_ACCEPT_ENABLED=true` in the local `.env` and restart the bridge to
+accept everyone who requests to join. The template defaults to `false`. The
+bot's guild role must have permission to accept requests.
+
+The exact server notice `Guild » Eletc has requested to join your guild!` triggers
+`/g accept Eletc`, using the actual requester's validated Minecraft username.
+Ordinary chat quoting that notice is ignored. Repeated notices for the same
+username are suppressed for 60 seconds, including across network reconnects.
+Requests received before the hub is ready wait for readiness and expire after
+60 seconds. No commands are sent while the bridge is stopped.
+
+The local log records that the acceptance command was sent; that alone does not
+prove the server granted membership. Confirm the first live request succeeds.
 
 ## Optional staff commands
 

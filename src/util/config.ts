@@ -31,6 +31,7 @@ export const envSchema = z
         MINECRAFT_CHAT_SEPARATOR: z.string().trim().min(1).max(10).default('>'),
         USE_PROFANITY_FILTER: boolean.default(true),
         USE_FIRST_WORD_OF_AUTHOR_NAME: boolean.default(false),
+        GUILD_AUTO_ACCEPT_ENABLED: boolean.default(false),
         REMINDER_ENABLED: boolean.default(false),
         REMINDER_MESSAGE: z.string().default(''),
         REMINDER_FREQUENCY: z.coerce.number().int().positive().default(60),
