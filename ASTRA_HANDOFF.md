@@ -1,3 +1,26 @@
+# Player positions and fast searches
+
+Updated 10 November 2026. Owner: Astra. Status: implemented; offline checks passed; live rollout in progress.
+
+## Delivery
+
+-   Target is `/Users/ben/Documents/ChatGPT/Guild Bridge`, branch `feat/dragsim-guild-chat`, origin NumberSixDev/bridge and upstream MiscGuild/bridge. NumberSixDev identity verified. Ben authorises scoped commit/push and restart of the established Mac LaunchAgent. Never commit credentials, authentication or player state.
+-   `/gleaderboard player username:<MinecraftName>` shows every available guild metric position, category defaults first, API server rank, 25 entries/page, arrows and the original search duration. Shared ranking helpers preserve descending order and alphabetical tie positions. Current membership is checked before lookup, publication and paging; departed members change rankings and departed subjects lose their report.
+-   All categories share one completed numeric dataset. Startup and five-minute background refreshes warm all categories including networth; the counted Minecraft roster refreshes every ten minutes. Cached results render immediately with an age label during refresh. New searches and navigation refuse stats older than fifteen minutes. `/refresh` retains its single-flight execution and one-minute cooldown.
+-   Ben explicitly requested a stocked cache for each leaderboard. The shared dataset pre-fills every category without requiring anyone to run each command. Persisted dynamic stat autocomplete survives restart too.
+-   Sanitized derived metrics persist atomically to ignored `.bridge-data/leaderboard-cache.json`, directory0700/file0600, bounded size/schema/context/age. No inventories or credentials persist in this file. Missing, corrupt, expired, future or wrongly scoped caches fall back to fresh collection. Published cache stays usable while a replacement is gathered.
+-   Concurrency trial: four live networth lookups took 4390/4300ms at concurrency2 and 4636/4307ms at concurrency4, all HTTP200. Keep concurrency2: no measured improvement from four.
+
+## Checks and release state
+
+-   `pnpm test`: build plus all 55 tests pass. Formatting/lint, configuration validation and diff whitespace pass.
+-   Tests cover cached results without waiting for blocked APIs, shared refreshes, shutdown publication guards, persistence/restart/autocomplete, corruption/scope/age, report pagination/ranking/ties, nonmember rejection and departed-member handling.
+-   Existing LaunchAgent restarted with the new build; live Discord API confirms the player/username subcommand plus all eleven categories are registered. Initial live cache fill and restart reuse verification are in progress.
+-   Existing bridge/recruitment behaviour and settings are preserved. No second Minecraft login, new startup/sleep settings, dependency changes or billing actions.
+-   Delegated coordinator ended at its time cap; root completed review fixes and verification. No worker remains active.
+
+---
+
 # Guild leaderboards
 
 Updated 10 November 2026. Owner: Astra. Status: PUSHED, DEPLOYED, roster/API verified; awaiting Ben's Discord page-navigation confirmation.

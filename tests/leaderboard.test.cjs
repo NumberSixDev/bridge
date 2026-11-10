@@ -1,5 +1,8 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 
 Object.assign(process.env, {
     MINECRAFT_EMAIL: 'bridge@example.test',
@@ -253,6 +256,34 @@ function makeCommandInteraction(subcommand, userId = 'user') {
     return { interaction, calls };
 }
 
+function makePlayerInteraction(username, userId = 'player-user') {
+    const result = makeCommandInteraction('player', userId);
+    result.interaction.options.getString = (name) => (name === 'username' ? username : null);
+    return result;
+}
+
+function richProfile(username, coins = 1) {
+    return profile({
+        username,
+        uuid: `uuid-${username}`,
+        profileId: `profile-${username}`,
+        rank: username === 'Master' ? 'MVP_PLUS' : 'DEFAULT',
+        profile: {
+            coins,
+            motes: 20,
+            bits: 5,
+            skills: { combat: 50, mining: 25 },
+            collections: { obsidian: 10, diamond: 5 },
+            bestiary: { zombie: { kills: 7 } },
+            slayer: { zombie_xp: 100, zombie_level: 3 },
+            dungeons: { completions: { F7: 4 }, secrets: 9 },
+            hotd: { exp: 200, nodes: { mining_speed: 4 } },
+            rng_meters: { dragon: { kills: 6 } },
+            stats: { base: { health: 1_000 }, additive: { strength: 50 } },
+        },
+    });
+}
+
 test('leaderboard service ranks only the current roster, paginates 25 rows, and isolates buttons', async () => {
     const names = ['Master', ...Array.from({ length: 26 }, (_, index) => `Member${index + 1}`)];
     let rosterRequest = 0;
@@ -332,6 +363,302 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     };
     await service.handleInteraction(wrongChannel);
     assert.equal(buttonCalls.at(-1)[1].ephemeral, true);
+});
+
+test('player report uses shared tie ranking, API rank, 25-entry pages, and rejects nonmembers before API work', async () => {
+    const names = ['Master', ...Array.from({ length: 26 }, (_, index) => `Member${index + 1}`)];
+    let service;
+    let profileCalls = 0;
+    const lookup = {
+        async getProfile(username) {
+            profileCalls += 1;
+            return richProfile(username, 100);
+        },
+        async getNetworth(username, profileId) {
+            return { username, profileId, total: 100, hidden: false, partial: false };
+        },
+    };
+    service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(names).forEach((line) => service.handleMinecraftMessage(line)),
+        lookup,
+        now: () => 1_000,
+        cooldownMs: 0,
+    });
+    const command = makePlayerInteraction('Member1');
+    await service.handleCommand(command.interaction);
+    const initial = command.calls.find(([name]) => name === 'editReply')[1];
+    assert.equal(profileCalls, names.length);
+    assert.match(initial.embeds[0].data.description, /Player: \*\*Member1\*\*/);
+    assert.match(initial.embeds[0].data.description, /#2 \/ 27/);
+    assert.doesNotMatch(initial.embeds[0].data.description, /\[MVP\+\] Member1/);
+    assert.match(initial.embeds[0].data.footer.text, /Report page 1\/2/);
+    assert.equal((initial.embeds[0].data.description.match(/^\*\*\d+\./gm) || []).length, 25);
+    const nextId = initial.components[0].components[2].data.custom_id;
+    const buttonCalls = [];
+    await service.handleInteraction({
+        customId: nextId,
+        guildId: '12345678901234567',
+        channelId: '12345678901234568',
+        message: {
+            id: 'leaderboard-message',
+            guildId: '12345678901234567',
+            embeds: [initial.embeds[0].toJSON()],
+        },
+        async deferUpdate() {},
+        async editReply(payload) {
+            buttonCalls.push(payload);
+        },
+        async followUp(payload) {
+            buttonCalls.push(payload);
+        },
+    });
+    assert.match(buttonCalls[0].embeds[0].data.footer.text, /Report page 2\/2/);
+    assert.equal(profileCalls, names.length, 'paging reuses one shared dataset');
+
+    const nonmember = makePlayerInteraction('NotInGuild', 'other-player');
+    await service.handleCommand(nonmember.interaction);
+    assert.match(nonmember.calls.at(-1)[1].content, /not a current member/);
+    assert.equal(profileCalls, names.length, 'nonmembers are rejected before API work');
+    service.stop();
+});
+
+test('stale cached leaderboards render immediately while refresh runs, and over-stale data fails closed', async () => {
+    let now = 1_000;
+    let service;
+    let release;
+    let blockProfiles = false;
+    const lookup = {
+        async getProfile(username) {
+            if (blockProfiles)
+                return new Promise((resolve) => {
+                    release = () => resolve(richProfile(username));
+                });
+            return richProfile(username);
+        },
+        async getNetworth(username, profileId) {
+            return { username, profileId, total: 100, hidden: false, partial: false };
+        },
+    };
+    service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(['Master']).forEach((line) => service.handleMinecraftMessage(line)),
+        lookup,
+        now: () => now,
+        cooldownMs: 0,
+    });
+    await service.handleCommand(makeCommandInteraction('purse').interaction);
+    now += 301_001;
+    blockProfiles = true;
+    const cached = makeCommandInteraction('purse', 'cached-user');
+    await service.handleCommand(cached.interaction);
+    const cachedPayload = cached.calls.at(-1)[1];
+    assert.match(cachedPayload.embeds[0].data.description, /Stats updated:/);
+    assert.match(cachedPayload.embeds[0].data.description, /background refresh ongoing/);
+    release();
+    service.stop();
+
+    let expiredNow = 1_000;
+    let expiredService;
+    let expireProfiles = false;
+    expiredService = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(['Master']).forEach((line) =>
+                expiredService.handleMinecraftMessage(line)
+            ),
+        now: () => expiredNow,
+        cooldownMs: 0,
+        lookup: {
+            async getProfile(username) {
+                if (expireProfiles) throw new Error('blocked');
+                return richProfile(username);
+            },
+            async getNetworth(username, profileId) {
+                if (expireProfiles) throw new Error('blocked');
+                return { username, profileId, total: 100, hidden: false, partial: false };
+            },
+        },
+    });
+    const expired = makeCommandInteraction('purse');
+    await expiredService.handleCommand(expired.interaction);
+    expiredNow += 16 * 60_000;
+    expireProfiles = true;
+    const refused = makeCommandInteraction('purse', 'expired-user');
+    await expiredService.handleCommand(refused.interaction);
+    assert.match(refused.calls.at(-1)[1].content, /Player stats are not available yet/);
+    expiredService.stop();
+});
+
+test('leaderboard cache round-trips sanitized numeric data with private file permissions', async () => {
+    const dataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'guild-bridge-leaderboard-'));
+    let service;
+    const names = ['Master'];
+    const lookup = {
+        async getProfile(username) {
+            return richProfile(username, 100);
+        },
+        async getNetworth(username, profileId) {
+            return { username, profileId, total: 100, hidden: false, partial: false };
+        },
+    };
+    const options = {
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(names).forEach((line) => service.handleMinecraftMessage(line)),
+        lookup,
+        now: () => 1_000,
+        cooldownMs: 0,
+        dataDir,
+    };
+    service = new LeaderboardService(options);
+    await service.handleCommand(makeCommandInteraction('networth').interaction);
+    service.stop();
+    const cachePath = path.join(dataDir, 'leaderboard-cache.json');
+    assert.equal(fs.statSync(cachePath).mode & 0o777, 0o600);
+    assert.equal(fs.statSync(dataDir).mode & 0o777, 0o700);
+    const cacheText = fs.readFileSync(cachePath, 'utf8');
+    assert.doesNotMatch(cacheText, /inventory|profile\":\{/);
+
+    let apiCalls = 0;
+    let restored;
+    restored = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(names).forEach((line) => restored.handleMinecraftMessage(line)),
+        lookup: {
+            async getProfile() {
+                apiCalls += 1;
+                throw new Error('cache should be used');
+            },
+            async getNetworth() {
+                apiCalls += 1;
+                throw new Error('cache should be used');
+            },
+        },
+        now: () => 1_001,
+        cooldownMs: 0,
+        dataDir,
+    });
+    const fromCache = makeCommandInteraction('networth', 'restored-user');
+    await restored.handleCommand(fromCache.interaction);
+    assert.equal(apiCalls, 0);
+    assert.match(fromCache.calls.at(-1)[1].embeds[0].data.description, /Master/);
+    let choices;
+    await restored.handleAutocomplete({
+        commandName: 'gleaderboard',
+        options: { getSubcommand: () => 'collections', getString: () => 'obsidian' },
+        async respond(value) {
+            choices = value;
+        },
+    });
+    assert.ok(
+        choices.some((choice) => choice.value.endsWith('.obsidian')),
+        'persisted dynamic metrics survive restart'
+    );
+    assert.equal(apiCalls, 0);
+    restored.stop();
+
+    const valid = JSON.parse(cacheText);
+    for (const invalid of [
+        '{bad json',
+        JSON.stringify({ ...valid, schemaVersion: 99 }),
+        JSON.stringify({ ...valid, context: { ...valid.context, serverId: 'other' } }),
+        JSON.stringify({ ...valid, completedAt: -1_000_000 }),
+        JSON.stringify({ ...valid, completedAt: 1_000_000 }),
+    ]) {
+        fs.writeFileSync(cachePath, invalid);
+        const rejected = new LeaderboardService(options);
+        assert.equal(rejected.dataset, undefined, 'invalid or wrongly scoped cache is ignored');
+        rejected.stop();
+    }
+    fs.rmSync(dataDir, { recursive: true, force: true });
+});
+
+test('player report pages recalculate departed members and retain the original search time', async () => {
+    let names = ['Master', 'Member1'];
+    let service;
+    service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand: () =>
+            rosterMessages(names).forEach((line) => service.handleMinecraftMessage(line)),
+        cooldownMs: 0,
+        lookup: {
+            async getProfile(username) {
+                return richProfile(username, 100);
+            },
+            async getNetworth(username, profileId) {
+                return { username, profileId, total: 100, hidden: false };
+            },
+        },
+    });
+    const command = makePlayerInteraction('Member1');
+    await service.handleCommand(command.interaction);
+    let payload = command.calls.at(-1)[1];
+    const footerTime = payload.embeds[0].data.footer.text.split(' • ')[1];
+    async function page(direction) {
+        await service.handleInteraction({
+            customId: payload.components[0].components[direction === 'next' ? 2 : 0].data.custom_id,
+            guildId: '12345678901234567',
+            channelId: '12345678901234568',
+            message: {
+                id: 'leaderboard-message',
+                guildId: '12345678901234567',
+                embeds: [payload.embeds[0].toJSON()],
+            },
+            async deferUpdate() {},
+            async editReply(value) {
+                payload = value;
+            },
+            async followUp(value) {
+                throw new Error(value.content);
+            },
+        });
+    }
+    await page('next');
+    assert.match(payload.embeds[0].data.footer.text, /Report page 2\/2/);
+    names = ['Member1'];
+    service.roster.disconnected();
+    await page('prev');
+    assert.match(payload.embeds[0].data.description, /#1 \/ 1/);
+    assert.equal(payload.embeds[0].data.footer.text.split(' • ')[1], footerTime);
+    names = ['Master'];
+    service.roster.disconnected();
+    await page('next');
+    assert.match(payload.content, /no longer a current guild member/);
+    assert.deepEqual(payload.components, []);
+    service.stop();
+});
+
+test('simultaneous cold lookups share one refresh and shutdown prevents publishing late data', async () => {
+    let release;
+    let calls = 0;
+    const service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand() {},
+        lookup: {
+            getProfile(username) {
+                calls++;
+                return new Promise((resolve) => {
+                    release = () => resolve(richProfile(username));
+                });
+            },
+            async getNetworth(username, profileId) {
+                return { username, profileId, total: 1, hidden: false };
+            },
+        },
+    });
+    const roster = { members: ['Master'], observedAt: Date.now() };
+    const first = service.startDatasetRefresh(roster, true);
+    const second = service.startDatasetRefresh(roster, true);
+    assert.equal(first, second);
+    assert.equal(calls, 1);
+    service.stop();
+    release();
+    await assert.rejects(first, /connection changed/);
+    assert.equal(service.dataset, undefined);
 });
 
 const { playerLabel } = require('../dist/src/leaderboard/presentation.js');

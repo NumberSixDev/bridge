@@ -133,6 +133,12 @@ alone is not sufficient for automatic admission. The panel explains this policy.
 
 Use `/refresh` to force a fresh guild list, player stats and networth lookup. Everyone can run it; only one refresh runs at a time, with a one-minute server-wide cooldown. Its private response reports data availability. Run a new leaderboard command after refreshing; existing pages remain snapshots.
 
+Use `/gleaderboard player username:<MinecraftName>` for a public report of every
+available metric position for one current guild member. Reports show the API
+server rank, available-data denominator, 25 entries per page and the original
+search-time footer. The target is checked against the verified current roster
+before any player API work and again when a page button is used.
+
 `/gleaderboard` ranks only the members returned by the bot's own `/g list`.
 The roster must contain complete, count-matched Guild Master, Admin, Staff,
 Bridge and Member groups before it can be used. A complete roster is cached for
@@ -148,6 +154,14 @@ show partial networth estimates with an approximate marker. Inventory contents
 and other private item data are never displayed. Results are stable for the
 ten-minute button session, which is bound to its original guild, channel and
 message; buttons also re-check current membership before changing page.
+
+Completed numeric stats refresh in the background every five minutes while
+Minecraft is ready. A usable result can render immediately with its `Stats
+updated` age while a refresh runs; results older than fifteen minutes are not
+served. The completed sanitized dataset is kept in the ignored
+`.bridge-data/leaderboard-cache.json` file with atomic writes and private file
+permissions so a restart preserves age without persisting inventories or
+credentials.
 
 ## Optional staff commands
 

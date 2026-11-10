@@ -60,6 +60,14 @@ export interface MetricDefinition {
     ) => number | undefined;
 }
 
+export interface MetricDescriptor {
+    id: string;
+    category: LeaderboardCategory;
+    label: string;
+    unit: MetricUnit;
+    default?: boolean;
+}
+
 export interface RankedPlayer {
     username: string;
     rank?: string;
@@ -78,4 +86,50 @@ export interface LeaderboardSnapshot {
     oldestProfileDataAt?: number;
     snapshotAt: number;
     searchDurationMs?: number;
+    statsUpdatedAt?: number;
+    statsRefreshOngoing?: boolean;
+}
+
+export interface PlayerStatsRecord {
+    username: string;
+    rank?: string;
+    uuid: string;
+    profileId: string;
+    profileObservedAt: number;
+    values: Record<string, number>;
+    approximate: Record<string, boolean>;
+}
+
+export interface LeaderboardDataset {
+    schemaVersion: 1;
+    context: {
+        serverId: string;
+        apiBaseUrl: string;
+        mode: 'main';
+    };
+    completedAt: number;
+    rosterObservedAt: number;
+    includesNetworth: boolean;
+    metrics: MetricDescriptor[];
+    records: PlayerStatsRecord[];
+}
+
+export interface PlayerReportEntry {
+    metric: MetricDescriptor;
+    value?: number;
+    approximate?: boolean;
+    position?: number;
+    rankedMembers?: number;
+}
+
+export interface PlayerReport {
+    username: string;
+    rank?: string;
+    profileId: string;
+    rosterCount: number;
+    rosterObservedAt: number;
+    datasetCompletedAt: number;
+    entries: PlayerReportEntry[];
+    searchDurationMs?: number;
+    statsRefreshOngoing?: boolean;
 }

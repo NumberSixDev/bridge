@@ -19,6 +19,7 @@ export default class Bridge {
     public readonly leaderboard = new LeaderboardService({
         sendMinecraftCommand: (command) => this.mineflayer.execute(command),
         isMinecraftReady: () => this.mineflayer.isReady,
+        dataDir: env.RECRUITMENT_DATA_DIR,
     });
     public readonly recruitment = new RecruitmentService({
         getChannel: () => this.discord.memberChannel,

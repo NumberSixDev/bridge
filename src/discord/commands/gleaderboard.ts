@@ -1,4 +1,4 @@
-import { ApplicationCommandOptionType } from 'discord.js';
+import { ApplicationCommandOptionType, ApplicationCommandSubCommandData } from 'discord.js';
 
 const categories = [
     ['networth', 'Rank current guild members by estimated networth.'],
@@ -14,28 +14,46 @@ const categories = [
     ['rng', 'Rank RNG meter kills or a selected meter.'],
 ] as const;
 
+const categoryOptions: ApplicationCommandSubCommandData[] = categories.map(
+    ([name, description]) => ({
+        name,
+        description,
+        type: ApplicationCommandOptionType.Subcommand,
+        options:
+            name === 'networth' || name === 'purse'
+                ? undefined
+                : [
+                      {
+                          name: 'stat',
+                          description:
+                              'Choose a specific stat or leave blank for the category total.',
+                          type: ApplicationCommandOptionType.String,
+                          required: false,
+                          autocomplete: true,
+                      },
+                  ],
+    })
+);
+
+const playerOption: ApplicationCommandSubCommandData = {
+    name: 'player',
+    description: 'Show every available leaderboard position for one guild member.',
+    type: ApplicationCommandOptionType.Subcommand,
+    options: [
+        {
+            name: 'username',
+            description: 'The Minecraft username to report.',
+            type: ApplicationCommandOptionType.String,
+            required: true,
+        },
+    ],
+};
+
 export default {
     data: {
         name: 'gleaderboard',
         description: 'Rank current Minecraft guild members by public player stats.',
-        options: categories.map(([name, description]) => ({
-            name,
-            description,
-            type: ApplicationCommandOptionType.Subcommand,
-            options:
-                name === 'networth' || name === 'purse'
-                    ? undefined
-                    : [
-                          {
-                              name: 'stat',
-                              description:
-                                  'Choose a specific stat or leave blank for the category total.',
-                              type: ApplicationCommandOptionType.String,
-                              required: false,
-                              autocomplete: true,
-                          },
-                      ],
-        })),
+        options: [...categoryOptions, playerOption],
     },
     run: async (bridge, interaction) => bridge.leaderboard.handleCommand(interaction),
 } as Command;

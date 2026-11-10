@@ -11,6 +11,10 @@ const MAX_MEMBERS = 500;
 const DEFAULT_TIMEOUT_MS = 10_000;
 export const GUILD_ROSTER_REFRESH_MS = 10 * 60_000;
 
+export function isValidMinecraftUsername(value: string) {
+    return USERNAME_PATTERN.test(value) && value === value.trim();
+}
+
 export interface GuildListHeader {
     group: GuildListGroup;
     expected: number;
