@@ -285,6 +285,10 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     const payload = command.calls.find(([name]) => name === 'editReply')[1];
     assert.match(payload.embeds[0].data.description, /Master/);
     assert.match(payload.embeds[0].data.footer.text, /Page 1\/2/);
+    const searchTime = payload.embeds[0].data.footer.text.match(
+        /Time Taken to Search: (\d+\.\d{2})s/
+    );
+    assert.ok(searchTime, 'the initial embed includes elapsed search time');
     assert.equal((payload.embeds[0].data.description.match(/^\*\*\d+\./gm) || []).length, 25);
     assert.equal(payload.components[0].components[0].data.disabled, true);
     const nextId = payload.components[0].components[2].data.custom_id;
@@ -313,6 +317,10 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     assert.equal(buttonCalls[0][0], 'deferUpdate');
     assert.match(buttonCalls[1][1].embeds[0].data.description, /Member1/);
     assert.match(buttonCalls[1][1].embeds[0].data.footer.text, /Page 2\/2/);
+    assert.ok(
+        buttonCalls[1][1].embeds[0].data.footer.text.endsWith(searchTime[0]),
+        'paging preserves the original search duration'
+    );
 
     const wrongChannel = {
         ...button,

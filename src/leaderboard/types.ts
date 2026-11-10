@@ -77,4 +77,5 @@ export interface LeaderboardSnapshot {
     rosterObservedAt: number;
     oldestProfileDataAt?: number;
     snapshotAt: number;
+    searchDurationMs?: number;
 }

@@ -11,6 +11,7 @@ import {
     AutocompleteInteraction,
 } from 'discord.js';
 import { randomUUID } from 'crypto';
+import { performance } from 'node:perf_hooks';
 import winston from 'winston';
 import env from '@util/env';
 import { formatAmount } from '../recruitment/amount';
@@ -264,6 +265,7 @@ export default class LeaderboardService {
     }
 
     public async handleCommand(interaction: ChatInputCommandInteraction) {
+        const searchStartedAt = performance.now();
         let category: LeaderboardCategory;
         try {
             const rawCategory = interaction.options.getSubcommand();
@@ -335,6 +337,7 @@ export default class LeaderboardService {
         }
 
         const sessionId = randomUUID();
+        snapshot.searchDurationMs = Math.max(0, performance.now() - searchStartedAt);
         const session: LeaderboardSession = {
             id: sessionId,
             guildId: env.DISCORD_SERVER_ID,
@@ -618,7 +621,11 @@ export default class LeaderboardService {
             .setColor('Purple')
             .setTitle(`Guild leaderboard · ${snapshot.metric.label}`)
             .setDescription(description)
-            .setFooter({ text: `Page ${boundedPage + 1}/${pageCount}` });
+            .setFooter({
+                text: `Page ${boundedPage + 1}/${pageCount} • Time Taken to Search: ${(
+                    (snapshot.searchDurationMs ?? 0) / 1_000
+                ).toFixed(2)}s`,
+            });
         const components =
             snapshot.rows.length > 0
                 ? [
