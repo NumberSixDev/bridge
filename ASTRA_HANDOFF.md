@@ -1,11 +1,11 @@
 # Player positions and fast searches
 
-Updated 10 November 2026. Owner: Astra. Status: PUSHED and RUNNING; populated cache and command registration verified. Discord user-navigation confirmation pending.
+Updated 10 November 2026. Owner: Astra. Status: PUSHED and RUNNING; populated cache and command registration verified. Ben confirmed the report is fast and both page buttons work.
 
 ## Delivery
 
 -   Target is `/Users/ben/Documents/ChatGPT/Guild Bridge`, branch `feat/dragsim-guild-chat`, origin NumberSixDev/bridge and upstream MiscGuild/bridge. NumberSixDev identity verified. Ben authorises scoped commit/push and restart of the established Mac LaunchAgent. Never commit credentials, authentication or player state.
--   `/gleaderboard player username:<MinecraftName>` shows every available guild metric position, category defaults first, API server rank, 25 entries/page, arrows and the original search duration. Shared ranking helpers preserve descending order and alphabetical tie positions. Current membership is checked before lookup, publication and paging; departed members change rankings and departed subjects lose their report.
+-   `/gleaderboard player username:<MinecraftName>` shows every available guild metric position, best position first (#1, #2, etc.), unavailable metrics last, capitalised category labels, API server rank, 25 entries/page, arrows and the original search duration. Shared ranking helpers preserve descending order and alphabetical tie positions. Current membership is checked before lookup, publication and paging; departed members change rankings and departed subjects lose their report.
 -   All categories share one completed numeric dataset. Startup and five-minute background refreshes warm all categories including networth; the counted Minecraft roster refreshes every ten minutes. Cached results render immediately with an age label during refresh. New searches and navigation refuse stats older than fifteen minutes. `/refresh` retains its single-flight execution and one-minute cooldown.
 -   Ben explicitly requested a stocked cache for each leaderboard. The shared dataset pre-fills every category without requiring anyone to run each command. Persisted dynamic stat autocomplete survives restart too.
 -   Sanitized derived metrics persist atomically to ignored `.bridge-data/leaderboard-cache.json`, directory0700/file0600, bounded size/schema/context/age. No inventories or credentials persist in this file. Missing, corrupt, expired, future or wrongly scoped caches fall back to fresh collection. Published cache stays usable while a replacement is gathered.
@@ -13,11 +13,11 @@ Updated 10 November 2026. Owner: Astra. Status: PUSHED and RUNNING; populated ca
 
 ## Checks and release state
 
--   `pnpm test`: build plus all 55 tests pass. Formatting/lint, configuration validation and diff whitespace pass.
+-   `pnpm test`: build plus all 56 tests pass. Formatting/lint, configuration validation and diff whitespace pass.
 -   Tests cover cached results without waiting for blocked APIs, shared refreshes, shutdown publication guards, persistence/restart/autocomplete, corruption/scope/age, report pagination/ranking/ties, nonmember rejection and departed-member handling.
 -   Source revision `da0dd9a` is pushed to origin and running under the existing LaunchAgent. Live Discord API confirms player/username plus all eleven categories. The bot reconnected as its existing account and verified 85 guild members.
 -   Initial live cache contains 83 usable member records, all eleven categories and 160 metrics, including networth. Two members lack usable profile data; boards report unavailable counts rather than zero values. File permissions0600 and sanitized payload verified. A separate fresh process loaded the persisted cache and rendered every category plus the player report with zero API requests, each under5ms locally (not Discord round-trip latency). All seven player-report pages serialized within Discord embed limits.
--   Ben was asked to try `/gleaderboard player username:LabGeek` and both arrows. End-user Discord navigation confirmation remains pending; local button flows are covered by passing tests.
+-   Ben confirmed `/gleaderboard player` is fast and both arrows work in Discord. His follow-up orders every metric by the player's lowest numerical position first, with unavailable metrics last, and capitalises category labels (including RNG). Sorting applies before pagination and when membership changes; a focused regression test passes.
 -   Existing bridge/recruitment behaviour and settings are preserved. No second Minecraft login, new startup/sleep settings, dependency changes or billing actions.
 -   Delegated coordinator ended at its time cap; root completed review fixes and verification. No worker remains active.
 

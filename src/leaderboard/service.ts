@@ -882,6 +882,11 @@ export default class LeaderboardService {
                 rankedMembers: position?.rankedMembers,
             };
         });
+        entries.sort(
+            (left, right) =>
+                (left.position ?? Number.MAX_SAFE_INTEGER) -
+                (right.position ?? Number.MAX_SAFE_INTEGER)
+        );
         return {
             dataset,
             username,
@@ -1106,6 +1111,11 @@ export default class LeaderboardService {
             entries
                 .map((entry, index) => {
                     const definition = descriptorMetric(entry.metric);
+                    const category =
+                        entry.metric.category === 'rng'
+                            ? 'RNG'
+                            : entry.metric.category.charAt(0).toUpperCase() +
+                              entry.metric.category.slice(1);
                     const value =
                         entry.value === undefined
                             ? 'Unavailable'
@@ -1118,9 +1128,9 @@ export default class LeaderboardService {
                                       ? 'Unranked'
                                       : `**#${entry.position} / ${entry.rankedMembers}**`
                               }`;
-                    return `**${boundedPage * PAGE_SIZE + index + 1}.** ${
-                        entry.metric.category
-                    } · ${entry.metric.label.slice(0, 64)} — ${value}`;
+                    return `**${
+                        boundedPage * PAGE_SIZE + index + 1
+                    }.** ${category} · ${entry.metric.label.slice(0, 64)} — ${value}`;
                 })
                 .join('\n'),
         ].join('\n');

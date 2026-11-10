@@ -424,6 +424,58 @@ test('player report uses shared tie ranking, API rank, 25-entry pages, and rejec
     service.stop();
 });
 
+test('player reports sort best positions first, unavailable last and capitalise categories', () => {
+    const service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand() {},
+    });
+    const dataset = {
+        completedAt: Date.now(),
+        metrics: ['networth', 'purse', 'collections', 'rng'].map((category) => ({
+            id: category,
+            category,
+            label: category,
+            unit: 'amount',
+            default: true,
+        })),
+        records: [
+            {
+                username: 'Player',
+                profileId: 'one',
+                values: { networth: 50, purse: 100, rng: 20 },
+                approximate: {},
+            },
+            {
+                username: 'Other',
+                profileId: 'two',
+                values: { networth: 100, purse: 50, rng: 10 },
+                approximate: {},
+            },
+        ],
+    };
+    const report = service.buildPlayerReport(
+        dataset,
+        { members: ['Player', 'Other'], observedAt: Date.now() },
+        'Player',
+        12
+    );
+    assert.deepEqual(
+        report.entries.map((entry) => entry.metric.id),
+        ['purse', 'rng', 'networth', 'collections']
+    );
+    assert.deepEqual(
+        report.entries.map((entry) => entry.position),
+        [1, 1, 2, undefined]
+    );
+    const payload = service.reportPayload({ id: 'test', report }, 0);
+    const description = payload.embeds[0].data.description;
+    assert.match(description, /1\.\*\* Purse/);
+    assert.match(description, /2\.\*\* RNG/);
+    assert.match(description, /3\.\*\* Networth/);
+    assert.match(description, /4\.\*\* Collections .*Unavailable/);
+    service.stop();
+});
+
 test('stale cached leaderboards render immediately while refresh runs, and over-stale data fails closed', async () => {
     let now = 1_000;
     let service;
