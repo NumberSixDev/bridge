@@ -105,6 +105,9 @@ Applications always use the separate `RECRUITMENT_CHANNEL_ID` (or `MEMBER_CHANNE
 posting the settings panel somewhere else does not change the application destination.
 Settings controls outside the staff command channel are rejected, including old panels and modals.
 Existing applications retain their original cards. The command reply links directly to the panel.
+Set `RECRUITMENT_PING_ROLE_ID` to add a role mention as normal message text above
+each new application embed. Only that role is allowed to be pinged; card updates
+do not ping again. Leave it blank to disable mentions.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
 The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto

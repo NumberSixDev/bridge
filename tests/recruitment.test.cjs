@@ -15,6 +15,7 @@ Object.assign(process.env, {
     USE_PROFANITY_FILTER: 'false',
     RECRUITMENT_DATA_DIR: '.bridge-data-test',
     RECRUITMENT_CHANNEL_ID: '12345678901234568',
+    RECRUITMENT_PING_ROLE_ID: '',
 });
 
 const { parseAmount, formatAmount } = require('../dist/src/recruitment/amount.js');
@@ -527,6 +528,54 @@ test('Discord delivery failure retains the application and retries without dupli
     await Promise.all([h.service.deliverApplicationCard(id), h.service.deliverApplicationCard(id)]);
     assert.equal(h.channel.messagesById.size, 1);
     h.service.stop();
+});
+
+test('new application cards ping only the configured role and edits never ping again', async () => {
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const originalRole = runtimeEnv.RECRUITMENT_PING_ROLE_ID;
+    try {
+        for (const roleId of ['12345678901234570', '']) {
+            runtimeEnv.RECRUITMENT_PING_ROLE_ID = roleId;
+            const h = makeService();
+            const sent = [];
+            const edited = [];
+            const send = h.channel.send.bind(h.channel);
+            h.channel.send = async (payload) => {
+                sent.push(payload);
+                const message = await send(payload);
+                const edit = message.edit.bind(message);
+                message.edit = async (next) => {
+                    edited.push(next);
+                    return edit(next);
+                };
+                return message;
+            };
+            try {
+                await h.service.handleJoinRequest('Applicant');
+                assert.equal(sent.length, 1);
+                assert.equal(sent[0].content, roleId ? `<@&${roleId}>` : undefined);
+                assert.equal(sent[0].embeds.length, 1);
+                assert.deepEqual(sent[0].allowedMentions, {
+                    parse: [],
+                    roles: roleId ? [roleId] : [],
+                });
+                await h.service.handleJoinRequest('Applicant');
+                await h.service.setMinimums('1b', '100m');
+                const application = h.store.snapshot().applications[0];
+                await h.service.deliverApplicationCard(application.id);
+                assert.equal(sent.length, 1, 'duplicate requests and updates reuse the card');
+                assert.ok(edited.length > 0);
+                for (const payload of edited) {
+                    assert.equal('content' in payload, false, 'retain the original text');
+                    assert.deepEqual(payload.allowedMentions, { parse: [] });
+                }
+            } finally {
+                h.service.stop();
+            }
+        }
+    } finally {
+        runtimeEnv.RECRUITMENT_PING_ROLE_ID = originalRole;
+    }
 });
 
 test('atomic disk state preserves settings and pending requests with private permissions', async () => {

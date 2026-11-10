@@ -900,7 +900,12 @@ export default class RecruitmentService {
                     throw new Error('Application message is outside its recruitment channel.');
                 await message.edit(payload);
             } else if (!application.messageId) {
-                const message = await channel.send(payload);
+                const roleId = env.RECRUITMENT_PING_ROLE_ID;
+                const message = await channel.send({
+                    ...payload,
+                    content: roleId ? `<@&${roleId}>` : undefined,
+                    allowedMentions: { parse: [], roles: roleId ? [roleId] : [] },
+                });
                 await this.exclusive(async () => {
                     const current = this.application(id);
                     if (!current || current.messageId) return;

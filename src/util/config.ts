@@ -56,6 +56,7 @@ export const envSchema = z
             .default('https://dragsim.co/api/'),
         RECRUITMENT_ALLOWED_ROLE_IDS: recruitmentRoleIds,
         RECRUITMENT_CHANNEL_ID: optionalSnowflake,
+        RECRUITMENT_PING_ROLE_ID: optionalSnowflake,
         PURGE_ALLOW_PARTIAL_NETWORTH: boolean.default(false),
         PURGE_PROTECTED_USERNAMES: z
             .string()
