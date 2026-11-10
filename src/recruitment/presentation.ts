@@ -15,7 +15,7 @@ function requirementLine(label: string, value: number | undefined, minimum: numb
     if (minimum === undefined) return `${label} = **Minimum not set**`;
     let status = 'Unavailable';
     if (value !== undefined && Number.isFinite(value)) {
-        status = value >= minimum ? 'Meets requirement' : 'Under requirement';
+        status = value >= minimum ? '✅ Meets requirement' : '❌ Under requirement';
     }
     return `${label} = **${status}** (min: ${formatAmount(minimum)})`;
 }

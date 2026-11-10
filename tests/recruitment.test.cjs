@@ -642,14 +642,14 @@ test('profile display strips Minecraft colour and formatting codes', () => {
 test('application reports compare both requirements and offer advice even with auto acceptance off', () => {
     const settings = { autoAcceptEnabled: false, minimumNetworth: 500, minimumPurse: 100 };
     const above = applicationReport(evidence(), settings, NOW).join('\n');
-    assert.match(above, /Networth = \*\*Meets requirement/);
-    assert.match(above, /Purse = \*\*Meets requirement/);
+    assert.match(above, /Networth = \*\*✅ Meets requirement/);
+    assert.match(above, /Purse = \*\*✅ Meets requirement/);
     assert.match(above, /Suggestion = \*\*Accept\*\*/);
     const below = applicationReport(evidence({ networth: 499, purse: 99 }), settings, NOW).join(
         '\n'
     );
-    assert.match(below, /Networth = \*\*Under requirement/);
-    assert.match(below, /Purse = \*\*Under requirement/);
+    assert.match(below, /Networth = \*\*❌ Under requirement/);
+    assert.match(below, /Purse = \*\*❌ Under requirement/);
     assert.match(below, /Below minimums/);
     for (const invalid of [
         { partial: true },
@@ -674,10 +674,16 @@ test('application embeds show clean profiles and refresh their report when minim
     await h.service.handleJoinRequest('Applicant');
     const application = h.store.snapshot().applications[0];
     const message = h.channel.messagesById.get(application.messageId);
-    assert.match(message.payload.embeds[0].data.description, /^Networth = \*\*Meets requirement/);
+    assert.match(
+        message.payload.embeds[0].data.description,
+        /^Networth = \*\*✅ Meets requirement/
+    );
     assert.match(message.payload.embeds[0].data.description, /Profile: \*\*Wise\*\*/);
     await h.service.setMinimums('501', '101');
     await new Promise((resolve) => setImmediate(resolve));
-    assert.match(message.payload.embeds[0].data.description, /^Networth = \*\*Under requirement/);
+    assert.match(
+        message.payload.embeds[0].data.description,
+        /^Networth = \*\*❌ Under requirement/
+    );
     assert.deepEqual(h.commands, []);
 });
