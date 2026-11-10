@@ -1,13 +1,13 @@
 # Guild Bridge recruitment
 
-Updated 10 November 2026. Status: deployed; channel-choice correction ready for release.
+Updated 10 November 2026. Status: deployed; final application-channel separation ready for release.
 
 ## Target and authority
 
 -   Existing checkout `/Users/ben/Documents/ChatGPT/Guild Bridge`, branch `feat/dragsim-guild-chat`.
 -   origin NumberSixDev/bridge; upstream MiscGuild/bridge. Authenticate as NumberSixDev, never Fixerq. Commit/push all finished changes; never credentials, auth caches or `.bridge-data/`.
 -   Ben authorised this recruitment implementation and normal live delivery. Auto-accept must start OFF, thresholds unset. Admin role 1569762077592125510 and Guild Master role 1569548424884387850 exclusively control recruitment.
--   Run `/recruitment panel` in the intended recruitment channel; it becomes the panel and new-application destination. Existing application cards stay where posted. No new startup or sleep changes.
+-   Applications go to explicitly selected channel 1569793036383162428 (`RECRUITMENT_CHANNEL_ID`). The settings panel is posted only by `/recruitment panel`, in the invoking channel; its location never changes the application destination. Existing cards stay where posted. No new startup or sleep changes.
 
 ## Implemented
 
@@ -22,7 +22,7 @@ Updated 10 November 2026. Status: deployed; channel-choice correction ready for 
 ## Evidence
 
 -   Live HTTP200 profile, official networth and external price-service checks succeeded. Runtime uses only the official HTTPS endpoints. Completed client verified live for two owned accounts: identity, purse and networth available; both valuations partial and therefore manual.
--   31 offline tests pass, plus build, formatting/lint and configuration validation. Includes exact API paths, both thresholds, bad/missing/stale/private/partial data, role isolation, settings modal/buttons, concurrency, disconnection, persistence failure, restart recovery and Discord delivery retry.
+-   32 offline tests pass, plus build, formatting/lint and configuration validation. Includes exact API paths, both thresholds, bad/missing/stale/private/partial data, role isolation, settings modal/buttons, concurrency, disconnection, persistence failure, restart recovery and Discord delivery retry.
 -   Admin/Guild Master roles and existing guild-bridge channel verified via Discord API.
 -   Existing accept-everyone mode was disabled locally before implementation. Old supervised service was reconnected successfully.
 -   Delegated execution stopped at its 20-minute deadline; no child remains. Owner corrected API route, recovery/decision races and completed additional tests. No unfinished delegated changes remain.

@@ -13,6 +13,7 @@ Object.assign(process.env, {
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
     RECRUITMENT_DATA_DIR: '.bridge-data-test',
+    RECRUITMENT_CHANNEL_ID: '12345678901234568',
 });
 
 const { parseAmount } = require('../dist/src/recruitment/amount.js');
@@ -559,7 +560,7 @@ test('missing, private, stale, uncertain or malformed data always remains manual
         assert.equal(evaluateEligibility(evidence(invalid), settings, NOW).eligible, false);
 });
 
-test('panel and new applications follow the invoking channel while old panel controls become inactive', async () => {
+test('panel follows the invoking channel while applications keep their separately configured channel', async () => {
     const h = makeService();
     const other = new FakeChannel();
     other.id = '99999999999999999';
@@ -580,6 +581,15 @@ test('panel and new applications follow the invoking channel while old panel con
     assert.ok(edit.result.shownModal);
     await h.service.handleJoinRequest('Applicant');
     const application = h.store.snapshot().applications[0];
-    assert.equal(application.channelId, other.id);
-    assert.ok(other.messagesById.has(application.messageId));
+    assert.equal(application.channelId, h.channel.id);
+    assert.ok(h.channel.messagesById.has(application.messageId));
+});
+
+test('startup and settings changes never create a panel before the panel command', async () => {
+    const h = makeService();
+    await h.service.onDiscordReady();
+    await h.service.setMinimums('1B', '100M');
+    await h.service.setAutoEnabled(true);
+    assert.equal(h.channel.messagesById.size, 0);
+    assert.equal(h.service.settings.panelMessageId, undefined);
 });

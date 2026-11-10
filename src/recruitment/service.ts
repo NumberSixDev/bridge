@@ -829,7 +829,7 @@ export default class RecruitmentService {
         if (this.stopped || !this.available) return false;
         const application = this.application(id);
         const targetChannelId =
-            application?.channelId ?? this.state.settings.panelChannelId ?? env.MEMBER_CHANNEL_ID;
+            application?.channelId ?? (env.RECRUITMENT_CHANNEL_ID || env.MEMBER_CHANNEL_ID);
         let channel: TextChannel | undefined;
         try {
             channel = await this.resolveChannel(targetChannelId);
@@ -866,7 +866,7 @@ export default class RecruitmentService {
                     return false;
                 }
                 if (message.channelId !== channel.id || message.guildId !== env.DISCORD_SERVER_ID)
-                    throw new Error('Application message is outside the member channel.');
+                    throw new Error('Application message is outside its recruitment channel.');
                 await message.edit(payload);
             } else if (!application.messageId) {
                 const message = await channel.send(payload);
@@ -880,7 +880,7 @@ export default class RecruitmentService {
                 });
             } else {
                 throw new Error(
-                    'Application card channel did not match the configured member channel.'
+                    'Application card channel did not match its stored recruitment channel.'
                 );
             }
             this.deliveryAttempts.delete(id);

@@ -49,20 +49,21 @@ pnpm setup-files
 
 Edit the local `.env` file:
 
-| Setting                        | Value                                                      |
-| ------------------------------ | ---------------------------------------------------------- |
-| `MINECRAFT_HOST`               | `dragsim.co`                                               |
-| `MINECRAFT_PORT`               | `25565`                                                    |
-| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version          |
-| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                      |
-| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector            |
-| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                        |
-| `DISCORD_TOKEN`                | Discord bot token                                          |
-| `DISCORD_SERVER_ID`            | The Discord server ID                                      |
-| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                           |
-| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment        |
-| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state              |
-| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/` |
+| Setting                        | Value                                                        |
+| ------------------------------ | ------------------------------------------------------------ |
+| `MINECRAFT_HOST`               | `dragsim.co`                                                 |
+| `MINECRAFT_PORT`               | `25565`                                                      |
+| `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version            |
+| `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                        |
+| `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector              |
+| `MINECRAFT_EMAIL`              | Microsoft account email for the bot                          |
+| `DISCORD_TOKEN`                | Discord bot token                                            |
+| `DISCORD_SERVER_ID`            | The Discord server ID                                        |
+| `MEMBER_CHANNEL_ID`            | The single guild-chat channel ID                             |
+| `RECRUITMENT_ALLOWED_ROLE_IDS` | Comma-separated roles allowed to manage recruitment          |
+| `RECRUITMENT_CHANNEL_ID`       | Application destination, independently of the settings panel |
+| `RECRUITMENT_DATA_DIR`         | Local ignored directory for recruitment state                |
+| `RECRUITMENT_API_BASE_URL`     | Official HTTPS API base, default `https://dragsim.co/api/`   |
 
 Keep credentials in `.env`. Microsoft tokens are stored locally in
 `.minecraft-auth/`. Both are ignored by Git. Do not copy personal authentication
@@ -94,10 +95,11 @@ Automatic acceptance is disabled by default; manual applications are enabled. Th
 `RECRUITMENT_ALLOWED_ROLE_IDS` can use `/recruitment panel`,
 `/recruitment requirements`, `/recruitment auto` and `/recruitment status`.
 Run `/recruitment panel` in the text channel where you want recruitment managed.
-It posts the settings embed there and sends new application cards to that channel.
+It posts the settings embed only when this command is run. It is never created on startup.
+Applications always use the separate `RECRUITMENT_CHANNEL_ID` (or `MEMBER_CHANNEL_ID` if unset);
+posting the settings panel somewhere else does not change the application destination.
 Running it in another channel moves the panel and disables the old panel’s controls.
-Existing applications retain their original cards. Before a panel is created, applications
-use `MEMBER_CHANNEL_ID`. The command reply links directly to the panel.
+Existing applications retain their original cards. The command reply links directly to the panel.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
 The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto

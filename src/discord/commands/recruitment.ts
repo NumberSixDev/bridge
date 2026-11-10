@@ -7,8 +7,7 @@ export default {
         options: [
             {
                 name: 'panel',
-                description:
-                    'Post the recruitment panel here and send new applications to this channel.',
+                description: 'Post or refresh the recruitment settings panel in this channel.',
                 type: ApplicationCommandOptionType.Subcommand,
             },
             {
