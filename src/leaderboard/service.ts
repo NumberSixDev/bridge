@@ -124,6 +124,9 @@ export default class LeaderboardService {
     private readonly lastCommandAt = new Map<string, number>();
     private stopped = false;
     private rosterTimer?: ReturnType<typeof setInterval>;
+    private refreshing = false;
+    private lastRefreshAt = -Infinity;
+    private cacheGeneration = 0;
 
     public constructor(options: LeaderboardServiceOptions) {
         this.lookup = options.lookup ?? new DragSimLeaderboardClient();
@@ -189,6 +192,53 @@ export default class LeaderboardService {
 
     public getRoster() {
         return this.roster.getRoster();
+    }
+
+    public async handleRefresh(interaction: ChatInputCommandInteraction) {
+        if (this.refreshing || this.now() - this.lastRefreshAt < 60_000) {
+            await interaction.reply({
+                content: this.refreshing
+                    ? 'A refresh is already running. Please wait for it to finish.'
+                    : 'The data was refreshed recently. Please wait a minute before refreshing again.',
+                ephemeral: true,
+            });
+            return;
+        }
+        this.refreshing = true;
+        this.lastRefreshAt = this.now();
+        try {
+            await interaction.deferReply({ ephemeral: true });
+            const roster = await this.roster.getRoster(true);
+            this.cacheGeneration += 1;
+            this.profileCache.clear();
+            this.networthCache.clear();
+            this.profileInflight.clear();
+            this.networthInflight.clear();
+            const result = await this.buildSnapshot(
+                'networth',
+                undefined,
+                roster.members,
+                roster.observedAt
+            );
+            if (typeof result === 'string') {
+                await interaction.editReply({ content: result });
+                return;
+            }
+            const profiles = roster.members.filter((name) =>
+                this.profileCache.has(name.toLowerCase())
+            ).length;
+            await interaction.editReply({
+                content: `Refreshed the guild list (${roster.members.length} members). Fresh player stats: ${profiles}/${roster.members.length}; networth available: ${result.rows.length}/${roster.members.length}. Run /gleaderboard again to view the refreshed data.`,
+            });
+        } catch (error) {
+            await interaction.editReply({
+                content: `Refresh could not complete: ${
+                    error instanceof Error ? error.message : 'Please try again shortly.'
+                }`,
+            });
+        } finally {
+            this.refreshing = false;
+        }
     }
 
     public async handleAutocomplete(interaction: AutocompleteInteraction<'cached'>) {
@@ -441,8 +491,10 @@ export default class LeaderboardService {
         if (cached && this.now() - cached.cachedAt <= PROFILE_CACHE_MS) return cached.value;
         const inFlight = this.profileInflight.get(key);
         if (inFlight) return inFlight;
+        const generation = this.cacheGeneration;
         const request = this.lookup.getProfile(username).then((profile) => {
-            this.profileCache.set(key, { value: profile, cachedAt: this.now() });
+            if (generation === this.cacheGeneration)
+                this.profileCache.set(key, { value: profile, cachedAt: this.now() });
             this.pruneProfileCache();
             return profile;
         });
@@ -472,8 +524,10 @@ export default class LeaderboardService {
         if (cached && this.now() - cached.cachedAt <= NETWORTH_CACHE_MS) return cached.value;
         const inFlight = this.networthInflight.get(key);
         if (inFlight) return inFlight;
+        const generation = this.cacheGeneration;
         const request = this.lookup.getNetworth(username, profileId).then((networth) => {
-            this.networthCache.set(key, { value: networth, cachedAt: this.now() });
+            if (generation === this.cacheGeneration)
+                this.networthCache.set(key, { value: networth, cachedAt: this.now() });
             this.pruneNetworthCache();
             return networth;
         });

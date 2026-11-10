@@ -466,3 +466,45 @@ test('guild roster is reused for ten minutes and supports forced background refr
     await collector.getRoster();
     assert.equal(requests, 4);
 });
+
+test('public refresh forces the roster and both API caches, and rejects concurrent refreshes', async () => {
+    let profileCalls = 0,
+        networthCalls = 0,
+        rosterCalls = 0;
+    const service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        now: () => 1_000,
+        cooldownMs: 0,
+        sendMinecraftCommand: () => {
+            rosterCalls++;
+            rosterMessages(['Master']).forEach((line) => service.handleMinecraftMessage(line));
+        },
+        lookup: {
+            async getProfile(username) {
+                profileCalls++;
+                return profile({ username });
+            },
+            async getNetworth(username, profileId) {
+                networthCalls++;
+                return { username, profileId, total: 500, hidden: false, partial: true };
+            },
+        },
+    });
+    await service.handleCommand(makeCommandInteraction('networth').interaction);
+    const refresh = makeCommandInteraction('refresh');
+    const pending = service.handleRefresh(refresh.interaction);
+    const duplicate = makeCommandInteraction('refresh', 'other-user');
+    await service.handleRefresh(duplicate.interaction);
+    assert.match(duplicate.calls[0][1].content, /already running/);
+    await pending;
+    assert.equal(profileCalls, 2);
+    assert.equal(networthCalls, 2);
+    assert.equal(rosterCalls, 2);
+    assert.match(refresh.calls.at(-1)[1].content, /Fresh player stats: 1\/1/);
+    const cooled = makeCommandInteraction('refresh');
+    await service.handleRefresh(cooled.interaction);
+    assert.match(cooled.calls[0][1].content, /wait a minute/);
+    await service.handleCommand(makeCommandInteraction('networth').interaction);
+    assert.equal(profileCalls, 2);
+    assert.equal(networthCalls, 2);
+});

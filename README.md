@@ -131,6 +131,8 @@ alone is not sufficient for automatic admission. The panel explains this policy.
 
 ## Guild leaderboards
 
+Use `/refresh` to force a fresh guild list, player stats and networth lookup. Everyone can run it; only one refresh runs at a time, with a one-minute server-wide cooldown. Its private response reports data availability. Run a new leaderboard command after refreshing; existing pages remain snapshots.
+
 `/gleaderboard` ranks only the members returned by the bot's own `/g list`.
 The roster must contain complete, count-matched Guild Master, Admin, Staff,
 Bridge and Member groups before it can be used. A complete roster is cached for

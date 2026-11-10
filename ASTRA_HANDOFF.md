@@ -5,6 +5,7 @@ Updated 10 November 2026. Owner: Astra. Status: PUSHED, DEPLOYED, roster/API ver
 ## Goal and decisions
 
 -   Public `/gleaderboard` ranks current Minecraft guild members highest first, with API server-rank labels and 25 rows per page. Anyone in the configured Discord server can use it and the left/right buttons.
+-   Public `/refresh` forces the complete guild roster and leaderboard API caches, with single-flight execution, a one-minute global cooldown and protection against old in-flight responses refilling cleared caches. Existing boards remain snapshots.
 -   Categories: networth, purse, collections, skills, bestiary, slayer, dungeons, mining, currencies, stats and RNG. Optional stat autocomplete selects individual metrics. XP, levels and counts stay distinct.
 -   Membership comes exclusively from the bot's `/g list`, all five rank groups and exact counts. The live separator is `●`; the parser also supports `•`. Complete rosters cache for ten minutes, refresh in the background every ten minutes while connected and clear on disconnect. Never use applicants, Discord roles or the global top 25 as membership.
 -   Official HTTPS player and networth API, selected main profile identity checks, two concurrent requests, bounded time/body/retry handling and shared rate-limit backoff. Five-minute in-memory stats cache; no inventory payload cached or committed. Private networth omitted, partial public networth marked approximate, unavailable data excluded rather than zeroed. Ben requested removal of the verbose partial-estimate summary line.
@@ -19,10 +20,10 @@ Updated 10 November 2026. Owner: Astra. Status: PUSHED, DEPLOYED, roster/API ver
 
 ## Verification and current state
 
--   Source commits `4834476` and `aedda4e` pushed to origin and deployed via existing LaunchAgent.
--   All 49 tests pass, including build; formatting/lint and check-config pass. Tests cover roster parsing/counts/chat-spoof rejection, cache, missing/private data, rank display, sorting, page boundaries/channel isolation, departed members/expiry and rate limiting.
+-   Source commits `4834476`, `aedda4e` and `d3239fd` pushed to origin and deployed via existing LaunchAgent. The subsequent /refresh command is locally verified and awaiting release.
+-   All 50 tests pass, including build; formatting/lint and check-config pass. Tests cover roster parsing/counts/chat-spoof rejection, cache, missing/private data, rank display, sorting, page boundaries/channel isolation, departed members/expiry and rate limiting.
 -   Live Discord API confirms all eleven `/gleaderboard` subcommands registered.
--   Live bot confirmed 82 members across all five guild ranks after the separator correction.
+-   Live bot confirmed 83 members across all five guild ranks after the separator correction.
 -   Real API client verified profiles, networth, rank mapping and all categories for two members. Their networth is partial and displayed as an estimate. No inventories retained in the stats cache.
 -   Ben was asked to run `/gleaderboard networth` and use both arrows. Awaiting confirmation/readback of that actual user journey.
 -   Coordinator timed out after leaving its implementation and passing-check handoff; owner completed review fixes, rank labels, additional tests, push and deployment. No coordinator remains running.
