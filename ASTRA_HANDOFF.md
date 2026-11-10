@@ -1,6 +1,6 @@
 # Player positions and fast searches
 
-Updated 10 November 2026. Owner: Astra. Status: implemented; offline checks passed; live rollout in progress.
+Updated 10 November 2026. Owner: Astra. Status: PUSHED and RUNNING; populated cache and command registration verified. Discord user-navigation confirmation pending.
 
 ## Delivery
 
@@ -15,7 +15,9 @@ Updated 10 November 2026. Owner: Astra. Status: implemented; offline checks pass
 
 -   `pnpm test`: build plus all 55 tests pass. Formatting/lint, configuration validation and diff whitespace pass.
 -   Tests cover cached results without waiting for blocked APIs, shared refreshes, shutdown publication guards, persistence/restart/autocomplete, corruption/scope/age, report pagination/ranking/ties, nonmember rejection and departed-member handling.
--   Existing LaunchAgent restarted with the new build; live Discord API confirms the player/username subcommand plus all eleven categories are registered. Initial live cache fill and restart reuse verification are in progress.
+-   Source revision `da0dd9a` is pushed to origin and running under the existing LaunchAgent. Live Discord API confirms player/username plus all eleven categories. The bot reconnected as its existing account and verified 85 guild members.
+-   Initial live cache contains 83 usable member records, all eleven categories and 160 metrics, including networth. Two members lack usable profile data; boards report unavailable counts rather than zero values. File permissions0600 and sanitized payload verified. A separate fresh process loaded the persisted cache and rendered every category plus the player report with zero API requests, each under5ms locally (not Discord round-trip latency). All seven player-report pages serialized within Discord embed limits.
+-   Ben was asked to try `/gleaderboard player username:LabGeek` and both arrows. End-user Discord navigation confirmation remains pending; local button flows are covered by passing tests.
 -   Existing bridge/recruitment behaviour and settings are preserved. No second Minecraft login, new startup/sleep settings, dependency changes or billing actions.
 -   Delegated coordinator ended at its time cap; root completed review fixes and verification. No worker remains active.
 
