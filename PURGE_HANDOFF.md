@@ -1,6 +1,6 @@
 # Guild purge
 
-Updated 10 November 2026. Owner: Astra. Status: purge and permanent exclusions pushed/deployed; Ben confirmed the panel works. Staff-channel restriction implemented and checked; release verification follows below.
+Updated 10 November 2026. Owner: Astra. Status: purge, permanent exclusions and staff-channel restriction pushed/deployed. Ben confirmed the purge panel works; all74 offline tests pass.
 
 ## Target and authority
 
@@ -31,3 +31,4 @@ Updated 10 November 2026. Owner: Astra. Status: purge and permanent exclusions p
 -   Ben's first `/purge` attempt exposed a roster-parser failure. A targeted runtime diagnostic found an observed trailing `♲` profile icon after a username; the parser had rejected its whole list line. Fix `c957ce7` strips only that observed display suffix, retains strict usernames/counts/spoof rejection, and is pushed/deployed. The new runtime verified all87 guild members and the `/guild kick` help entry. All67 tests, formatting/lint and configuration checks still pass. Temporary diagnostics were removed.
 -   Ben retried `/purge` and confirmed the panel works. Real removals and the bot's kick permission require the authorised user's explicit final confirmation; neither is claimed tested live.
 -   Staff-channel checks: build and all74 offline tests pass, including owner/role-bearing command denial outside the channel, old settings/purge controls, separate application reviews, public commands, channel configuration and purge service guards.
+-   Staff-channel source `dc4ba19` pushed as NumberSixDev and remote SHA verified. Formatting/lint and local configuration pass. Discord readback confirms the configured staff channel belongs to the correct guild; the deployed configuration accepts that channel and rejects guild-chat/application channels for management commands. Existing LaunchAgent restarted at22:13UTC, reconnected LabGeek2 and verified all87 members plus kick capability. Actual user clicks under the new channel restriction have not yet been observed; no agent issued a real kick.
