@@ -1,4 +1,4 @@
-import { ActivityType, IntentsBitField } from 'discord.js';
+import { IntentsBitField } from 'discord.js';
 import winston from 'winston';
 import env from '@util/env';
 import Discord from '@discord/discord';
@@ -6,49 +6,32 @@ import Mineflayer from '@mineflayer/mineflayer';
 
 export default class Bridge {
     public readonly discord = new Discord({
-        allowedMentions: { parse: ['users', 'roles'], repliedUser: true },
+        allowedMentions: { parse: [], repliedUser: false },
         intents: [
             IntentsBitField.Flags.Guilds,
             IntentsBitField.Flags.GuildMessages,
             IntentsBitField.Flags.MessageContent,
         ],
     });
-
     public readonly mineflayer = new Mineflayer();
-    public onlineCount = 0;
-    public totalCount = 125;
 
     constructor() {
-        try {
-            this.start();
-        } catch (error) {
-            winston.error(error);
-        }
+        this.start().catch((error: unknown) => {
+            winston.error('Bridge startup failed:', error);
+            this.stop();
+            process.exitCode = 1;
+        });
+        process.once('SIGINT', () => this.stop());
+        process.once('SIGTERM', () => this.stop());
     }
 
-    public setStatus() {
-        const plural = this.onlineCount - 1 !== 1;
-
-        if (this.discord.isReady()) {
-            this.discord.user.setActivity(
-                `${this.onlineCount - 1} online player${plural ? 's' : ''}`,
-                {
-                    type: ActivityType.Watching,
-                }
-            );
-        }
+    public stop() {
+        this.mineflayer.stop();
+        this.discord.destroy();
     }
 
     private async start() {
-        await Promise.all([
-            this.discord.loadCommands(),
-            this.discord.loadEvents(this),
-            this.mineflayer.loadEvents(this),
-        ]);
-
+        await Promise.all([this.discord.loadCommands(), this.discord.loadEvents(this)]);
         await this.discord.login(env.DISCORD_TOKEN);
     }
 }
-
-const handleError = (e: Error) => winston.error(e);
-process.on('uncaughtException', handleError).on('unhandledRejection', handleError);

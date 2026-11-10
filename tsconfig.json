@@ -17,10 +17,8 @@
         "skipLibCheck": true,
         "isolatedModules": true,
         "paths": {
-            "@blacklist/*": ["./src/blacklist/*"],
             "@discord/*": ["./src/discord/*"],
             "@mineflayer/*": ["./src/mineflayer/*"],
-            "@requests/*": ["./src/requests/*"],
             "@util/*": ["./src/util/*"]
         }
     }

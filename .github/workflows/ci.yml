@@ -15,10 +15,10 @@ jobs:
                   version: 9
                   run_install: false
 
-            - name: Use Node.js v18
+            - name: Use Node.js v22
               uses: actions/setup-node@v4
               with:
-                  node-version: 18
+                  node-version: 22
                   cache: pnpm
 
             - name: Install dependencies
@@ -27,6 +27,6 @@ jobs:
             - name: Lint
               run: pnpm format:check
 
-            - name: Setup files & build
+            - name: Build and offline tests
               if: success() || failure()
-              run: pnpm setup-files && pnpm build
+              run: pnpm test

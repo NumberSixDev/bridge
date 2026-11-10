@@ -1,21 +1,12 @@
 import { escapeMarkdown } from 'discord.js';
-import getRankColor from '@util/get-rank-color';
 
 export default {
     name: 'chat:guildChat',
     runOnce: false,
-    run: async (
-        bridge,
-        channel: 'Guild' | 'Officer',
-        rank: string | undefined,
-        playerName: string,
-        guildRank: string | undefined,
-        message: string
-    ) => {
-        const content = ` **${rank ? `${rank} ` : ''}${escapeMarkdown(playerName)}${
-            guildRank ? ` ${guildRank}` : ''
-        }:** ${escapeMarkdown(message)}`;
-
-        await bridge.discord.send(channel === 'Guild' ? 'gc' : 'oc', content, getRankColor(rank));
+    run: async (bridge, rank: string | undefined, playerName: string, message: string) => {
+        // Discord messages stay in Discord; suppress the bot's own relay echo.
+        if (playerName.toLowerCase() === bridge.mineflayer.username?.toLowerCase()) return;
+        const author = rank ? `${rank} ${playerName}` : playerName;
+        await bridge.discord.send(`**${escapeMarkdown(author)}:** ${escapeMarkdown(message)}`);
     },
 } as BotEvent;

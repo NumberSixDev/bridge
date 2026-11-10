@@ -3,35 +3,37 @@ import { ApplicationCommandOptionType, EmbedBuilder } from 'discord.js';
 export default {
     data: {
         name: 'command',
-        description: 'Execute any command in game!',
+        description: 'Send a command through the Minecraft bot.',
         options: [
             {
                 name: 'command',
-                description: 'What command would you like to execute?',
+                description: 'The Minecraft command to send',
                 type: ApplicationCommandOptionType.String,
                 required: true,
             },
         ],
     },
     run: async (bridge, interaction, args) => {
-        const command = (args[0] as string).startsWith('/') ? (args[0] as string) : `/${args[0]}`;
+        const input = args[0] as string;
+        const command = input.startsWith('/') ? input : `/${input}`;
         const embed = new EmbedBuilder();
-
         try {
-            await bridge.mineflayer.execute(command, true);
-
+            bridge.mineflayer.execute(command);
             embed
                 .setColor('Green')
-                .setTitle('Completed!')
-                .setDescription(`The command \`${command}\` has been executed.`);
-        } catch (e) {
+                .setTitle('Sent')
+                .setDescription(
+                    'The command was sent to Minecraft. This does not confirm the server accepted it.'
+                );
+        } catch (error) {
             embed
                 .setColor('Red')
-                .setTitle('Error')
-                .setDescription(e as string);
+                .setTitle('Not sent')
+                .setDescription(
+                    error instanceof Error ? error.message : 'The command could not be sent.'
+                );
         }
-
-        await interaction.reply({ embeds: [embed] });
+        await interaction.reply({ embeds: [embed], ephemeral: true });
     },
     staffOnly: true,
 } as Command;

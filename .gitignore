@@ -74,6 +74,7 @@ history/
 # dotenv environment variables file
 .env
 .env.test
+.minecraft-auth/
 
 # Blacklist file
 src/blacklist/_blacklist.json

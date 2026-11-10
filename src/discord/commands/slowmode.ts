@@ -19,7 +19,7 @@ export default {
     run: async (bridge, interaction, args) => {
         const time = (args[0] as number) || 0;
 
-        bridge.discord.memberChannel?.setRateLimitPerUser(time);
+        await bridge.discord.memberChannel?.setRateLimitPerUser(time);
 
         const embed = new EmbedBuilder()
             .setColor('Green')
