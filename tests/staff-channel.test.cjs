@@ -32,6 +32,10 @@ function interaction(overrides = {}) {
         isStringSelectMenu: () => false,
         replies,
         reply: async (payload) => replies.push(payload),
+        followUp: async (payload) => replies.push(payload),
+        async deferUpdate() {
+            this.deferred = true;
+        },
         ...overrides,
     };
 }

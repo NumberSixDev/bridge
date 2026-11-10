@@ -68,9 +68,14 @@ export default {
                 return;
             }
             if (!bridge.recruitment.ownsInteraction(interaction)) return;
+            const isApplicationButton =
+                isButton && interaction.customId.startsWith('recruitment:application:');
             try {
+                // Acknowledge the card click before the fresh role lookup; authorisation
+                // and stored message/channel checks still run before any decision.
+                if (isApplicationButton) await interaction.deferUpdate();
                 if (!(await bridge.recruitment.authoriseInteraction(interaction))) {
-                    await interaction.reply({
+                    const denial = {
                         embeds: [
                             new EmbedBuilder()
                                 .setColor('Red')
@@ -79,14 +84,18 @@ export default {
                                 ),
                         ],
                         ephemeral: true,
-                    });
+                    };
+                    if (isApplicationButton) await interaction.followUp(denial);
+                    else await interaction.reply(denial);
                     return;
                 }
                 await bridge.recruitment.handleInteraction(interaction);
             } catch (error) {
                 winston.error('Recruitment interaction failed:', error);
                 const content = 'There was an error while handling that recruitment control.';
-                if (interaction.replied || interaction.deferred)
+                if (isApplicationButton && (interaction.replied || interaction.deferred))
+                    await interaction.followUp({ content, ephemeral: true });
+                else if (interaction.replied || interaction.deferred)
                     await interaction.editReply({ content });
                 else await interaction.reply({ content, ephemeral: true });
             }

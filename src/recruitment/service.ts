@@ -76,7 +76,7 @@ function statusLabel(application: ApplicationRecord) {
         case 'acceptance-sent':
             return 'Acceptance sent';
         case 'denied':
-            return 'Denied locally';
+            return 'Denied';
         case 'needs-verification':
             return 'Needs verification';
         case 'accepting':
@@ -512,6 +512,8 @@ export default class RecruitmentService {
             this.requireAvailable();
             const application = this.application(id);
             if (!application) return { ok: false, message: 'That application no longer exists.' };
+            if (kind === 'deny' && application.status === 'denied')
+                return { ok: true, message: 'That application has already been denied.' };
             if (application.status !== 'pending')
                 return { ok: false, message: 'That application has already been decided.' };
             if (kind === 'deny') {
@@ -665,13 +667,14 @@ export default class RecruitmentService {
             await this.replyEphemeral(interaction, 'That application card is no longer active.');
             return;
         }
-        await interaction.deferUpdate();
+        if (!interaction.deferred && !interaction.replied) await interaction.deferUpdate();
         const result = await this.decide(
             id,
             match[2] === 'accept' ? 'manual-accept' : 'deny',
             interaction.user.id
         );
-        await interaction.followUp({ content: result.message, ephemeral: true });
+        if (match[2] !== 'deny' || !result.ok)
+            await interaction.followUp({ content: result.message, ephemeral: true });
     }
 
     private async handleModal(interaction: ModalSubmitInteraction<'cached'>) {
@@ -775,7 +778,11 @@ export default class RecruitmentService {
             `Profile snapshot saved: **${savedAge}**`,
         ];
         if (application.deliveryIssue) values.push(`Notice: ${application.deliveryIssue}`);
-        if (application.decision?.note && application.status !== 'acceptance-sent')
+        if (
+            application.decision?.note &&
+            application.status !== 'acceptance-sent' &&
+            application.status !== 'denied'
+        )
             values.push(application.decision.note);
         let color: 'Red' | 'Green' | 'Purple' = 'Purple';
         if (application.status === 'denied') color = 'Red';
@@ -1116,7 +1123,14 @@ export default class RecruitmentService {
             | StringSelectMenuInteraction<'cached'>,
         content: string
     ) {
-        if (interaction.replied || interaction.deferred) await interaction.editReply({ content });
+        if (
+            (interaction.replied || interaction.deferred) &&
+            interaction.isButton() &&
+            interaction.customId.startsWith(APPLICATION_PREFIX)
+        )
+            await interaction.followUp({ content, ephemeral: true });
+        else if (interaction.replied || interaction.deferred)
+            await interaction.editReply({ content });
         else await interaction.reply({ content, ephemeral: true });
     }
 }

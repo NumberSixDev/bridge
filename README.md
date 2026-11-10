@@ -120,8 +120,11 @@ not retroactively accept existing applications.
 Automatic acceptance sends `/g accept <username>` only after both current
 thresholds pass, the Minecraft connection is ready and the decision has been
 persisted. `Acceptance sent` is not proof of server membership. Manual Deny is a
-local suppression only because the server's decline command is not verified; the
-bridge does not guess one. The legacy `GUILD_AUTO_ACCEPT_ENABLED` setting is
+silent local dismissal: the original card becomes red, shows **Denied** and disables
+its buttons. It sends no Minecraft command, role ping, DM or separate confirmation.
+Repeated denial clicks are harmless. Application clicks are acknowledged before
+the fresh role check; errors are private and never replace the card's content.
+The legacy `GUILD_AUTO_ACCEPT_ENABLED` setting is
 retained only for configuration compatibility and cannot bypass recruitment.
 
 Settings and applications are stored locally in `.bridge-data/recruitment.json`

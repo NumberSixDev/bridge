@@ -449,6 +449,92 @@ test('settings panel opens a modal, persists changes, toggles auto mode and reje
     assert.equal(h.service.settings.autoAcceptEnabled, false);
 });
 
+test('deny acknowledges before role lookup and silently updates only the original card, including repeated clicks', async () => {
+    const h = makeService();
+    await h.service.handleJoinRequest('Applicant');
+    const application = h.store.snapshot().applications[0];
+    const message = h.channel.messagesById.get(application.messageId);
+    const click = fakeInteraction(h, {
+        customId: `recruitment:application:${application.id}:deny`,
+        message,
+    });
+    const events = [];
+    const fetchMember = click.interaction.guild.members.fetch;
+    let release;
+    const roleGate = new Promise((resolve) => {
+        release = resolve;
+    });
+    click.interaction.deferUpdate = async () => {
+        events.push('acknowledged');
+        click.interaction.deferred = true;
+    };
+    click.interaction.guild.members.fetch = async () => {
+        events.push('role check');
+        await roleGate;
+        return fetchMember();
+    };
+    try {
+        const running = click.run();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(events, ['acknowledged', 'role check']);
+        assert.equal(h.store.snapshot().applications[0].status, 'pending');
+        release();
+        await running;
+        assert.deepEqual(click.result.replies, []);
+        assert.equal(h.store.snapshot().applications[0].status, 'denied');
+        assert.equal(message.payload.embeds[0].data.color, require('discord.js').Colors.Red);
+        assert.match(message.payload.embeds[0].data.description, /Status: \*\*Denied\*\*/);
+        assert.doesNotMatch(message.payload.embeds[0].data.description, /Local denial only/);
+        assert.ok(message.payload.components[0].components.every((button) => button.data.disabled));
+        assert.deepEqual(message.payload.allowedMentions, { parse: [] });
+        const second = fakeInteraction(h, {
+            customId: `recruitment:application:${application.id}:deny`,
+            message,
+        });
+        await second.run();
+        assert.deepEqual(second.result.replies, []);
+        assert.equal(h.channel.counter, 1);
+        assert.deepEqual(h.commands, []);
+    } finally {
+        release();
+        h.service.stop();
+    }
+});
+
+test('denied permissions and forged application cards use private errors without overwriting the card', async () => {
+    const h = makeService();
+    await h.service.handleJoinRequest('Applicant');
+    const application = h.store.snapshot().applications[0];
+    const message = h.channel.messagesById.get(application.messageId);
+    const original = message.payload;
+    try {
+        for (const options of [
+            { roles: [] },
+            { channelId: '99999999999999999' },
+            { message: { ...message, id: 'forged' } },
+        ]) {
+            const click = fakeInteraction(h, {
+                customId: `recruitment:application:${application.id}:deny`,
+                message,
+                ...options,
+            });
+            click.interaction.editReply = async () => {
+                throw Error('Must not overwrite the original application card');
+            };
+            await click.run();
+            assert.equal(click.interaction.deferred, true);
+            assert.equal(click.result.replies.length, 1);
+            assert.equal(click.result.replies[0].ephemeral, true);
+            assert.equal(h.store.snapshot().applications[0].status, 'pending');
+            assert.deepEqual(message.payload, original);
+        }
+        assert.deepEqual(h.commands, []);
+        assert.equal(h.channel.counter, 1);
+    } finally {
+        h.service.stop();
+    }
+});
+
 test('concurrent application clicks send one acceptance; disconnected, forged and wrong-channel clicks do not send', async () => {
     const h = makeService({ ready: false });
     await h.service.handleJoinRequest('Applicant');
