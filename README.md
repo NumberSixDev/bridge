@@ -19,6 +19,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Reconnects after a connection ends and supports optional guild reminders.
 -   Records guild join applications with profile summaries and persistent Accept/Deny controls.
 -   Supports a persistent recruitment settings panel with optional thresholded automatic acceptance.
+-   Provides public `/gleaderboard` rankings for current Minecraft guild members with paginated buttons.
 
 The original Hypixel API lookups, Limbo commands, member-count polling, guild
 moderation commands and blacklist integration have been removed. There is no
@@ -128,6 +129,24 @@ be within five minutes; missing, private, partial, unpriced or uncertain data go
 to manual review. The sample profiles were partial, so a large displayed total
 alone is not sufficient for automatic admission. The panel explains this policy.
 
+## Guild leaderboards
+
+`/gleaderboard` ranks only the members returned by the bot's own `/g list`.
+The roster must contain complete, count-matched Guild Master, Admin, Staff,
+Bridge and Member groups before it can be used. A complete roster is cached for
+up to 60 seconds and is cleared on disconnect; an incomplete or failed refresh
+is never used as a stale fallback.
+
+Available categories are `networth`, `purse`, `collections`, `skills`,
+`bestiary`, `slayer`, `dungeons`, `mining`, `currencies`, `stats` and `rng`.
+Categories with multiple safe metrics provide autocomplete. Rankings use the
+official HTTPS player and networth endpoints, fetch at most two players at a
+time, omit failed or unavailable values rather than treating them as zero, and
+show partial networth estimates with an approximate marker. Inventory contents
+and other private item data are never displayed. Results are stable for the
+ten-minute button session, which is bound to its original guild, channel and
+message; buttons also re-check current membership before changing page.
+
 ## Optional staff commands
 
 `/help` is public. `/command`, `/slowmode` and `/terminate` require the configured
@@ -191,3 +210,5 @@ The original project includes adaptations from
 [xMdb/hypixel-guild-chat-bot](https://github.com/xmdb/hypixel-guild-chat-bot), and
 [unaussprechlich/hypixel-api-typescript](https://github.com/unaussprechlich/hypixel-api-typescript).
 See [LICENSE](LICENSE).
+
+Leaderboard rows display server ranks from the official player API (for example `[MVP+]`) beside each name. Default/unranked players have no prefix. Networth with private inventory is omitted; partial public valuations are labelled estimated.

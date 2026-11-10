@@ -3,6 +3,7 @@ import winston from 'winston';
 import env from '@util/env';
 import Discord from '@discord/discord';
 import Mineflayer from '@mineflayer/mineflayer';
+import LeaderboardService from './leaderboard/service';
 import RecruitmentService from './recruitment/service';
 
 export default class Bridge {
@@ -15,6 +16,10 @@ export default class Bridge {
         ],
     });
     public readonly mineflayer = new Mineflayer();
+    public readonly leaderboard = new LeaderboardService({
+        sendMinecraftCommand: (command) => this.mineflayer.execute(command),
+        isMinecraftReady: () => this.mineflayer.isReady,
+    });
     public readonly recruitment = new RecruitmentService({
         getChannel: () => this.discord.memberChannel,
         resolveChannel: async (id) => {
@@ -44,6 +49,7 @@ export default class Bridge {
     }
 
     public stop() {
+        this.leaderboard.stop();
         this.recruitment.stop();
         this.mineflayer.stop();
         this.discord.destroy();

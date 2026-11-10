@@ -8,10 +8,38 @@ export default {
     run: async (bridge, interaction: Interaction) => {
         if (!interaction.inCachedGuild() || interaction.guildId !== env.DISCORD_SERVER_ID) return;
 
+        if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) {
+            if (interaction.commandName !== 'gleaderboard') return;
+            try {
+                if (bridge.leaderboard) await bridge.leaderboard.handleAutocomplete(interaction);
+            } catch (error) {
+                winston.error('Leaderboard autocomplete failed:', error);
+            }
+            return;
+        }
+
         const isButton = typeof interaction.isButton === 'function' && interaction.isButton();
         const isModalSubmit =
             typeof interaction.isModalSubmit === 'function' && interaction.isModalSubmit();
         if (isButton || isModalSubmit) {
+            if (isButton && bridge.leaderboard?.ownsInteraction(interaction)) {
+                try {
+                    await bridge.leaderboard.handleInteraction(interaction);
+                } catch (error) {
+                    winston.error('Leaderboard interaction failed:', error);
+                    if (interaction.replied || interaction.deferred)
+                        await interaction.followUp({
+                            content: 'There was an error while handling that leaderboard control.',
+                            ephemeral: true,
+                        });
+                    else
+                        await interaction.reply({
+                            content: 'There was an error while handling that leaderboard control.',
+                            ephemeral: true,
+                        });
+                }
+                return;
+            }
             if (!bridge.recruitment.ownsInteraction(interaction)) return;
             try {
                 if (!(await bridge.recruitment.authoriseInteraction(interaction))) {
