@@ -21,6 +21,7 @@ import env from '@util/env';
 import { parseAmount, formatAmount } from './amount';
 import { DragSimLookupClient } from './api';
 import { evaluateEligibility } from './policy';
+import eligibilityEmbed from './eligibility';
 import { applicationReport, cleanProfileName } from './presentation';
 import { FileRecruitmentStore } from './store';
 import {
@@ -260,6 +261,39 @@ export default class RecruitmentService {
             .filter((application) => application.status === 'pending' && application.autoCandidate)
             .map((application) => application.id);
         await Promise.all(ids.map((id) => this.tryAutomaticAcceptance(id)));
+    }
+
+    public async handleEligibilityCommand(interaction: ChatInputCommandInteraction) {
+        if (!this.available || this.stopped) {
+            await interaction.reply({ content: this.unavailableMessage(), ephemeral: true });
+            return;
+        }
+        const username = interaction.options.getString('username', true).trim();
+        if (!USERNAME_PATTERN.test(username)) {
+            await interaction.reply({
+                content: 'Enter a Minecraft username using 1–16 letters, numbers or underscores.',
+                ephemeral: true,
+            });
+            return;
+        }
+        const started = this.now();
+        await interaction.deferReply({});
+        try {
+            const evidence = await this.serialLookup(() => this.lookup.lookup(username));
+            await interaction.editReply({
+                embeds: [
+                    eligibilityEmbed(evidence, this.settings, this.now(), this.now() - started),
+                ],
+                allowedMentions: { parse: [] },
+            });
+        } catch (error) {
+            winston.warn('Eligibility lookup failed:', error);
+            await interaction.editReply({
+                content:
+                    'Eligibility could not be verified. Check the username and that the main profile is public, then try again.',
+                allowedMentions: { parse: [] },
+            });
+        }
     }
 
     public async handleCommand(interaction: ChatInputCommandInteraction) {

@@ -42,6 +42,7 @@ test('every restricted command requires the staff channel, even for the owner; p
         'slowmode',
         'terminate',
         'recruitment',
+        'eligibility',
         'purge',
         'help',
         'gleaderboard',

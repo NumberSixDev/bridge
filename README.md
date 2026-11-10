@@ -139,6 +139,16 @@ be within five minutes; missing, private, partial, unpriced or uncertain data go
 to manual review. The sample profiles were partial, so a large displayed total
 alone is not sufficient for automatic admission. The panel explains this policy.
 
+## Guild eligibility
+
+`/eligibility username:<MinecraftName>` checks any player's main profile, estimated
+networth (including purse) and purse against the current recruitment minimums.
+Only the configured Admin/Guild Master roles may use it, in `STAFF_COMMAND_CHANNEL_ID`.
+The concise report shows each requirement with a tick/cross, the clean profile name,
+snapshot age and search time. Both minimums must pass; automatic acceptance can stay
+off. Incomplete, private, missing or stale data requires manual review. This is a
+read-only lookup and does not create an application or send a guild command.
+
 ## Guild leaderboards
 
 Use `/refresh` to force a fresh guild list, player stats and networth lookup. Everyone can run it; only one refresh runs at a time, with a one-minute server-wide cooldown. Its private response reports data availability. Run a new leaderboard command after refreshing; existing pages remain snapshots.
@@ -197,7 +207,7 @@ command; a missing post-command roster confirmation stops the remaining job.
 `BOT_OWNER_ID` or `STAFF_ROLE_ID`; both can stay blank to deny everyone access.
 All commands are registered only in the configured Discord server.
 
-`/command`, `/slowmode`, `/terminate`, `/recruitment` and `/purge` can only run in
+`/command`, `/slowmode`, `/terminate`, `/recruitment`, `/eligibility` and `/purge` can only run in
 `STAFF_COMMAND_CHANNEL_ID` (default `1569792569418977330`). Purge controls and
 recruitment settings buttons/forms have the same restriction. Attempts elsewhere
 receive a private reply linking to the allowed channel. Role checks still apply
