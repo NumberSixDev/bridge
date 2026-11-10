@@ -32,6 +32,15 @@ export default class Mineflayer {
             defaultChatPatterns: false,
         });
         this.bot = bot;
+        // DragSim sends its pack during configuration, before the first spawn.
+        // Mineflayer 4.37.1's helper serialises UUID objects as zeroes (#4043).
+        // Keep the packet's raw UUID; this headless bridge does not render textures.
+        bot._client.on('add_resource_pack', (packet: { uuid: string }) => {
+            [3, 0].forEach((result) => {
+                bot._client.write('resource_pack_receive', { uuid: packet.uuid, result });
+            });
+            winston.info('Acknowledged the server resource pack.');
+        });
         bot.on('error', (error) => {
             winston.error('Minecraft connection error:', error);
             if (this.bot === bot) bot.end('connection error');

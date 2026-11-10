@@ -209,6 +209,37 @@ test('configuration requires credentials and valid single-guild IDs and chat com
     assert.equal(envSchema.safeParse({ ...valid, MINECRAFT_CHAT_COMMAND: 'gc' }).success, false);
 });
 
+test('resource pack replies preserve each UUID on the 1.21.4 wire before spawn', async () => {
+    const { EventEmitter } = require('node:events');
+    const protocol = require(require.resolve('minecraft-protocol', {
+        paths: [require.resolve('mineflayer')],
+    }));
+    const serializer = protocol.createSerializer({ state: 'configuration', version: '1.21.4' });
+    const replies = [];
+    const bot = new EventEmitter();
+    bot._client = new EventEmitter();
+    bot._client.write = (name, params) => {
+        replies.push(serializer.createPacketBuffer({ name, params }));
+    };
+    bot.quit = () => {};
+    const mineflayer = new Mineflayer(() => bot);
+    await mineflayer.connect({ discord: { send: async () => {} }, stop() {} });
+    for (const uuid of [
+        'f81d4fae-7dec-11d0-a765-00a0c91e6bf6',
+        'a95c5314-9c4c-4b32-b802-7b80fd471133',
+    ]) {
+        bot._client.emit('add_resource_pack', { uuid });
+        const [accepted, loaded] = replies.splice(0);
+        const expectedId = Buffer.from(uuid.replaceAll('-', ''), 'hex');
+        assert.ok(accepted.includes(expectedId), 'acceptance must carry the server pack ID');
+        assert.ok(loaded.includes(expectedId), 'completion must carry the same pack ID');
+        assert.equal(accepted.at(-1), 3);
+        assert.equal(loaded.at(-1), 0);
+    }
+    assert.throws(() => mineflayer.chat('before spawn'), /not connected yet/);
+    mineflayer.stop();
+});
+
 test('Mineflayer starts only on connect, waits for spawn, sends /gc, deduplicates retry and stop cancels it', async () => {
     const { EventEmitter } = require('node:events');
     const originalSetTimeout = global.setTimeout;
@@ -226,6 +257,7 @@ test('Mineflayer starts only on connect, waits for spawn, sends /gc, deduplicate
     try {
         const clients = [];
         class FakeBot extends EventEmitter {
+            _client = new EventEmitter();
             username = 'LabGeek';
             chats = [];
             patterns = [];
