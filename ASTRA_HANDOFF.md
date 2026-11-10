@@ -36,7 +36,8 @@ Updated: 10 November 2026. Status: running and verified live.
 ## Verification
 
 -   `pnpm test`: build and all fourteen offline tests passed, including resource-pack wire UUIDs, hub readiness gating, 120 prefix/suffix combinations and the complete auto-accept event route.
--   Auto-accept tests cover default-off behaviour, quoting/spoof rejection, valid arbitrary usernames, duplicate suppression, readiness queuing, stale-request expiry, stopped state and command failures. A genuine new live join request is still needed to confirm server-side permission and admission.
+-   Auto-accept tests cover default-off behaviour, quoting/spoof rejection, valid arbitrary usernames, duplicate suppression, readiness queuing, stale-request expiry, stopped state and command failures.
+-   VERIFIED LIVE: the service observed a genuine request and logged the automatic `/g accept` command. Ben confirmed the requester joined without manual acceptance, then reported multiple further successful joins. The bot's acceptance permission and end-to-end behaviour are confirmed.
 -   `pnpm format:check`: formatting and lint passed.
 -   `pnpm check-config`: passed.
 -   Discord intent/channel permission checks passed; the configured staff role exists.
@@ -53,4 +54,4 @@ Updated: 10 November 2026. Status: running and verified live.
 
 -   Leave the bot account disconnected from the Minecraft game client while the bridge runs. Concurrent use causes DragSim's `You are already connected to this proxy!` rejection.
 -   Use the LaunchAgent commands to stop or restart this Mac's service; starting another copy with pnpm or PM2 would duplicate the account session.
--   Keep the Mac powered on, logged in, connected and awake. Core chat setup is complete; verify auto-accept against the next genuine join request.
+-   Keep the Mac powered on, logged in, connected and awake. Core chat setup and auto-accept are complete and verified live.
