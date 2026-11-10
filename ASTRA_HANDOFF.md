@@ -121,3 +121,8 @@ Updated 10 November 2026. Status: PUSHED and DEPLOYED; real application cards an
 
 -   Source `e931656` pushed to NumberSixDev and deployed through the existing Mac LaunchAgent. Local `RECRUITMENT_PING_ROLE_ID` is configured to the requested Applications role. New cards include the role mention as normal message text above their embed, with only that role allowed; edits preserve the original text and cannot ping again. Blank configuration disables mentions.
 -   Build and all75 offline tests, formatting/lint and configuration passed. Discord role/channel permissions verified read-only. The restarted bot reconnected and verified87 guild members. Ben requested a live test; a clearly labelled test embed was sent in the applications channel and Discord readback confirmed its role mention and embed. No membership action was performed.
+
+## Application expiry display, 10 November 2026
+
+-   Source `c764822` pushed and deployed. Application embeds use `Expires: <t:DEADLINE:R>`, with the deadline fixed to the original join-notice receipt plus300 seconds. Receipt is captured before the state queue; delivery delays, duplicates, updates and restarts cannot extend it. Discord renders and updates the relative time without repeated pings or message sends.
+-   Build and all76 tests plus formatting/lint/configuration pass. Read-only Discord verification of an existing application confirmed the live relative timestamp equals its persisted original receipt plus300 seconds. Existing LaunchAgent reconnected and verified88 guild members. This change adds the requested display; server acceptance rules remain authoritative.
