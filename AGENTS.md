@@ -25,6 +25,7 @@
 
 ## Checks
 
+-   Ben disabled the GitHub Actions CI workflow on 10 November 2026 to stop billing-lock failure emails. Keep it disabled unless Ben asks to re-enable it. Local checks below still apply.
 -   Runtime: Node.js 22 or newer and pnpm.
 -   `pnpm test` builds and runs offline tests without connecting accounts.
 -   `pnpm format:check` checks formatting and lint.
