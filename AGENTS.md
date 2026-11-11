@@ -31,4 +31,5 @@
 -   `pnpm test` builds and runs offline tests without connecting accounts.
 -   `pnpm format:check` checks formatting and lint.
 -   After building, `pnpm check-config` validates local settings without connecting accounts.
+-   After building, `pnpm check-performance` measures lookup throughput with simulated latency; use it for search/lookup changes.
 -   See `README.md` for Mac setup and the first live relay checks.
