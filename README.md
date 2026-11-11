@@ -151,6 +151,9 @@ The concise report shows each requirement with a tick/cross, the clean profile n
 snapshot age and search time. Both minimums must pass; automatic acceptance can stay
 off. Incomplete, private, missing or stale data requires manual review. This is a
 read-only lookup and does not create an application or send a guild command.
+Recruitment and eligibility share a queue of at most two concurrent player
+lookups. Overlapping requests for the same username share one API lookup;
+completed results are not reused, so a later check still fetches fresh evidence.
 
 ## Guild leaderboards
 
@@ -226,9 +229,13 @@ in other channels.
 ```sh
 pnpm test
 pnpm format:check
+pnpm check-performance
 ```
 
 The tests use fake connections and do not sign in to Minecraft or Discord.
+After the build, `check-performance` measures overlapping eligibility lookups
+with simulated API latency and checks concurrency, duplicate suppression and
+read-only behaviour. It makes no real API calls or guild changes.
 The build clears its own `dist/` directory before compiling, so removed
 Hypixel handlers cannot survive in an old build.
 

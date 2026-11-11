@@ -22,6 +22,7 @@ import { parseAmount, formatAmount } from './amount';
 import { DragSimLookupClient } from './api';
 import { evaluateEligibility } from './policy';
 import eligibilityEmbed from './eligibility';
+import LookupQueue from './lookup-queue';
 import { applicationReport, cleanProfileName } from './presentation';
 import { FileRecruitmentStore } from './store';
 import {
@@ -101,7 +102,7 @@ export default class RecruitmentService {
     private panelTail: Promise<boolean> = Promise.resolve(false);
     private storageIssue?: string;
     private mutationTail = Promise.resolve();
-    private lookupTail = Promise.resolve();
+    private readonly lookupQueue: LookupQueue;
     private readonly deliveryAttempts = new Map<string, number>();
     private readonly deliveryTimers = new Map<string, NodeJS.Timeout>();
 
@@ -110,6 +111,10 @@ export default class RecruitmentService {
             options.store ??
             new FileRecruitmentStore(path.resolve(env.RECRUITMENT_DATA_DIR, 'recruitment.json'));
         this.lookup = options.lookup ?? new DragSimLookupClient();
+        this.lookupQueue = new LookupQueue((username) => {
+            this.requireAvailable();
+            return this.lookup.lookup(username);
+        });
         this.now = options.now ?? Date.now;
         this.getChannel = options.getChannel;
         this.resolveChannel =
@@ -279,7 +284,7 @@ export default class RecruitmentService {
         const started = this.now();
         await interaction.deferReply({});
         try {
-            const evidence = await this.serialLookup(() => this.lookup.lookup(username));
+            const evidence = await this.lookupQueue.lookup(username);
             await interaction.editReply({
                 embeds: [
                     eligibilityEmbed(evidence, this.settings, this.now(), this.now() - started),
@@ -417,10 +422,7 @@ export default class RecruitmentService {
         await this.deliverApplicationCard(id);
         let evidence;
         try {
-            evidence = await this.serialLookup(() => {
-                this.requireAvailable();
-                return this.lookup.lookup(this.application(id)?.username ?? '');
-            });
+            evidence = await this.lookupQueue.lookup(this.application(id)?.username ?? '');
             const currentUsername = this.application(id)?.username;
             if (
                 !currentUsername ||
@@ -1059,20 +1061,6 @@ export default class RecruitmentService {
         const previous = this.mutationTail;
         let release!: () => void;
         this.mutationTail = new Promise<void>((resolve) => {
-            release = resolve;
-        });
-        await previous;
-        try {
-            return await operation();
-        } finally {
-            release();
-        }
-    }
-
-    private async serialLookup<T>(operation: () => Promise<T>): Promise<T> {
-        const previous = this.lookupTail;
-        let release!: () => void;
-        this.lookupTail = new Promise<void>((resolve) => {
             release = resolve;
         });
         await previous;

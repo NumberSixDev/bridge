@@ -8,6 +8,7 @@
         "build": "node scripts/clean.js && tsc && tsc-alias",
         "clean": "node scripts/clean.js",
         "check-config": "node scripts/check-config.js",
+        "check-performance": "node scripts/check-performance.cjs",
         "test": "pnpm build && node --test tests/*.test.cjs",
         "dev": "tsx watch src/index.ts",
         "format:check": "prettier --check . && eslint .",
