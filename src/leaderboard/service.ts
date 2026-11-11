@@ -16,6 +16,7 @@ import path from 'node:path';
 import { performance } from 'node:perf_hooks';
 import winston from 'winston';
 import env from '@util/env';
+import withTimeout from '@util/with-timeout';
 import { formatAmount } from '../recruitment/amount';
 import { DragSimLeaderboardClient } from './api';
 import { isLeaderboardCategory, metricChoices, metricDefinitions } from './metrics';
@@ -87,6 +88,9 @@ export interface LeaderboardServiceOptions {
     now?: () => number;
     cooldownMs?: number;
     dataDir?: string;
+    lookupTimeoutMs?: number;
+    refreshTimeoutMs?: number;
+    responseTimeoutMs?: number;
 }
 
 function cloneProfileList(cache: Map<string, CachedProfile>) {
@@ -180,12 +184,19 @@ export default class LeaderboardService {
     private dataset?: LeaderboardDataset;
     private refreshPromise?: Promise<LeaderboardDataset>;
     private refreshIncludesNetworth = false;
+    private refreshGeneration = 0;
+    private readonly lookupTimeoutMs: number;
+    private readonly refreshTimeoutMs: number;
+    private readonly responseTimeoutMs: number;
 
     public constructor(options: LeaderboardServiceOptions) {
         this.lookup = options.lookup ?? new DragSimLeaderboardClient();
         this.now = options.now ?? Date.now;
         this.cooldownMs = options.cooldownMs ?? COMMAND_COOLDOWN_MS;
         this.dataDir = options.dataDir;
+        this.lookupTimeoutMs = options.lookupTimeoutMs ?? 20_000;
+        this.refreshTimeoutMs = options.refreshTimeoutMs ?? 150_000;
+        this.responseTimeoutMs = options.responseTimeoutMs ?? 15_000;
         this.dataset = this.loadDataset();
         this.roster = new GuildRosterCollector({
             sendCommand: options.sendMinecraftCommand,
@@ -254,6 +265,7 @@ export default class LeaderboardService {
 
     public onMinecraftDisconnected() {
         this.lifecycleGeneration += 1;
+        this.invalidateRefresh();
         clearInterval(this.rosterTimer);
         clearInterval(this.statsTimer);
         this.rosterTimer = undefined;
@@ -663,7 +675,11 @@ export default class LeaderboardService {
             return usable;
         }
         try {
-            return await this.startDatasetRefresh(roster, requireNetworth);
+            return await withTimeout(
+                this.startDatasetRefresh(roster, requireNetworth),
+                this.responseTimeoutMs,
+                'Player stats are still refreshing. Please try again shortly.'
+            );
         } catch (error) {
             const fallback = this.usableDataset(requireNetworth);
             if (fallback) return fallback;
@@ -691,13 +707,32 @@ export default class LeaderboardService {
             return this.refreshPromise.then(() => this.startDatasetRefresh(roster, true));
         }
         const lifecycle = this.lifecycleGeneration;
+        const refresh = ++this.refreshGeneration;
         this.refreshIncludesNetworth = includeNetworth;
-        const request = this.collectDataset(roster, includeNetworth, lifecycle)
-            .then((dataset) => {
-                if (this.stopped || lifecycle !== this.lifecycleGeneration)
+        const request = withTimeout(
+            this.collectDataset(roster, includeNetworth, lifecycle, refresh),
+            this.refreshTimeoutMs,
+            'Player stats refresh timed out; the next request can retry.',
+            () => {
+                if (refresh === this.refreshGeneration) this.invalidateRefresh();
+            }
+        )
+            .then(async (dataset) => {
+                if (
+                    this.stopped ||
+                    lifecycle !== this.lifecycleGeneration ||
+                    refresh !== this.refreshGeneration
+                )
                     throw new Error('Minecraft connection changed during the stats refresh.');
                 this.dataset = dataset;
-                return this.persistDataset(dataset).then(() => dataset);
+                await withTimeout(
+                    this.persistDataset(dataset),
+                    5_000,
+                    'Player stats cache save timed out.'
+                ).catch((error: unknown) =>
+                    winston.warn(error instanceof Error ? error.message : error)
+                );
+                return dataset;
             })
             .finally(() => {
                 if (this.refreshPromise === request) {
@@ -709,6 +744,15 @@ export default class LeaderboardService {
         return request;
     }
 
+    private invalidateRefresh() {
+        this.refreshGeneration += 1;
+        this.cacheGeneration += 1;
+        this.refreshPromise = undefined;
+        this.refreshIncludesNetworth = false;
+        this.profileInflight.clear();
+        this.networthInflight.clear();
+    }
+
     private async refreshInBackground() {
         if (this.stopped) return;
         const roster = await this.roster.getRoster();
@@ -718,7 +762,8 @@ export default class LeaderboardService {
     private async collectDataset(
         roster: GuildRoster,
         includeNetworth: boolean,
-        lifecycle: number
+        lifecycle: number,
+        refresh: number
     ): Promise<LeaderboardDataset> {
         if (!roster.members.length)
             throw new Error('The current Minecraft guild roster is empty; nothing can be ranked.');
@@ -728,6 +773,7 @@ export default class LeaderboardService {
                 if (
                     this.stopped ||
                     lifecycle !== this.lifecycleGeneration ||
+                    refresh !== this.refreshGeneration ||
                     this.now() >= deadline
                 )
                     throw new Error('Lookup deadline reached.');
@@ -758,6 +804,7 @@ export default class LeaderboardService {
                     if (
                         this.stopped ||
                         lifecycle !== this.lifecycleGeneration ||
+                        refresh !== this.refreshGeneration ||
                         this.now() >= deadline
                     )
                         throw new Error('Lookup deadline reached.');
@@ -949,7 +996,11 @@ export default class LeaderboardService {
         const inFlight = this.profileInflight.get(key);
         if (inFlight) return inFlight;
         const generation = this.cacheGeneration;
-        const request = this.lookup.getProfile(username).then((profile) => {
+        const request = withTimeout(
+            this.lookup.getProfile(username),
+            this.lookupTimeoutMs,
+            'Player profile lookup timed out.'
+        ).then((profile) => {
             if (generation === this.cacheGeneration)
                 this.profileCache.set(key, { value: profile, cachedAt: this.now() });
             this.pruneProfileCache();
@@ -983,7 +1034,11 @@ export default class LeaderboardService {
         const inFlight = this.networthInflight.get(key);
         if (inFlight) return inFlight;
         const generation = this.cacheGeneration;
-        const request = this.lookup.getNetworth(username, profileId).then((networth) => {
+        const request = withTimeout(
+            this.lookup.getNetworth(username, profileId),
+            this.lookupTimeoutMs,
+            'Player networth lookup timed out.'
+        ).then((networth) => {
             if (generation === this.cacheGeneration)
                 this.networthCache.set(key, { value: networth, cachedAt: this.now() });
             this.pruneNetworthCache();
@@ -1350,6 +1405,10 @@ export default class LeaderboardService {
             await fsPromises.chmod(directory, 0o700);
             await fsPromises.writeFile(temporary, text, { mode: 0o600 });
             await fsPromises.chmod(temporary, 0o600);
+            if (this.dataset !== dataset) {
+                await fsPromises.unlink(temporary).catch(() => undefined);
+                return;
+            }
             await fsPromises.rename(temporary, file);
         } catch (error) {
             winston.warn(

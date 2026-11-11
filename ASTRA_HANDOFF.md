@@ -1,3 +1,11 @@
+# Stalled searches, 11 November 2026
+
+-   Incident: both purge and leaderboards stayed on Discord's deferred response. The counted guild roster continued updating, but the shared player-stat dataset remained at06:26 until the service was restarted around20:49. Fresh cache writes resumed at20:50 and20:55. The exact internal await was not captured; the refresh, API body reads and cache writes had no independent hard completion deadline.
+-   Fix: hard API deadlines release concurrency slots even when transport/body cancellation does not settle. Individual stats lookups clear in-progress entries after20 seconds; whole refreshes expire after150 seconds and invalidate their generation. Cache persistence is bounded to5 seconds and cannot publish over newer data. Disconnect invalidates the shared refresh too. Leaderboard data waits return a clear retry message after15 seconds; purge previews after20 seconds.
+-   Freshness, rate limits, permanent purge protections and confirmation rules are preserved. No agent issued a real kick. Recruitment/eligibility reads receive the same transport deadline protection.
+-   Verification: build and92 tests pass, including hung fetch/body reads, released queue slots, retry recovery, late-result rejection and both commands replacing their deferred response. Existing Mac LaunchAgent is the release target; no second Minecraft connection or dependency/configuration change.
+-   Release status: checks complete; commit/push and runtime verification pending. GitHub CI must remain disabled.
+
 # Player positions and fast searches
 
 Updated 10 November 2026. Owner: Astra. Status: PUSHED and RUNNING; populated cache and command registration verified. Ben confirmed the report is fast and both page buttons work.

@@ -22,6 +22,104 @@ const { DragSimLeaderboardClient } = require('../dist/src/leaderboard/api.js');
 const { metricDefinitions, findMetricDefinition } = require('../dist/src/leaderboard/metrics.js');
 const LeaderboardService = require('../dist/src/leaderboard/service.js').default;
 
+test('leaderboard API releases queue slots when fetch or body reading ignores abort', async () => {
+    let calls = 0;
+    const client = new DragSimLeaderboardClient({
+        timeoutMs: 5,
+        fetcher: async () => {
+            calls++;
+            if (calls === 1) return new Promise(() => {});
+            if (calls === 2)
+                return {
+                    ok: true,
+                    status: 200,
+                    headers: new Headers(),
+                    body: { getReader: () => ({ read: () => new Promise(() => {}) }) },
+                };
+            return response({
+                mode: 'main',
+                profile_id: 'main',
+                total: 5,
+                hidden: false,
+                partial: false,
+            });
+        },
+    });
+    const failures = await Promise.allSettled([
+        client.getNetworth('One', 'main'),
+        client.getNetworth('Two', 'main'),
+    ]);
+    assert.ok(
+        failures.every(
+            (result) => result.status === 'rejected' && /timed out/.test(result.reason.message)
+        )
+    );
+    assert.equal((await client.getNetworth('Three', 'main')).total, 5);
+    assert.equal(calls, 3);
+});
+
+test('stalled dataset refresh returns a response, resets, and cannot overwrite a later successful refresh', async () => {
+    const service = new LeaderboardService({
+        sendMinecraftCommand: () => {},
+        isMinecraftReady: () => true,
+        responseTimeoutMs: 5,
+        refreshTimeoutMs: 20,
+    });
+    const roster = { members: ['One'], observedAt: Date.now() };
+    let release;
+    const blocked = new Promise((resolve) => {
+        release = resolve;
+    });
+    service.collectDataset = () => blocked;
+    service.persistDataset = async () => {};
+    try {
+        const result = await service.ensureDataset(roster, true);
+        assert.match(result, /still refreshing/);
+        const pending = service.refreshPromise;
+        assert.ok(pending);
+        await assert.rejects(pending, /refresh timed out/);
+        assert.equal(service.refreshPromise, undefined);
+        const fresh = { completedAt: Date.now(), includesNetworth: true, records: [] };
+        service.collectDataset = async () => fresh;
+        assert.equal(await service.ensureDataset(roster, true), fresh);
+        release({ completedAt: 1, includesNetworth: true, records: [] });
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(service.dataset, fresh);
+    } finally {
+        service.stop();
+    }
+});
+
+test('profile and networth timeouts clear in-progress caches and permit a fresh retry', async () => {
+    let blocked = true;
+    const service = new LeaderboardService({
+        sendMinecraftCommand: () => {},
+        isMinecraftReady: () => true,
+        lookupTimeoutMs: 5,
+        lookup: {
+            getProfile: async (username) =>
+                blocked ? new Promise(() => {}) : profile({ username }),
+            getNetworth: async (username, profileId) =>
+                blocked
+                    ? new Promise(() => {})
+                    : { username, profileId, total: 3, hidden: false, partial: false },
+        },
+    });
+    try {
+        await Promise.all([
+            assert.rejects(service.getProfile('One'), /timed out/),
+            assert.rejects(service.getNetworth('One', 'main'), /timed out/),
+        ]);
+        assert.equal(service.profileInflight.size, 0);
+        assert.equal(service.networthInflight.size, 0);
+        blocked = false;
+        assert.equal((await service.getProfile('One')).username, 'One');
+        assert.equal((await service.getNetworth('One', 'main')).total, 3);
+    } finally {
+        service.stop();
+    }
+});
+
 function completeRoster(collector, names = ['Master', 'AdminOne', 'MemberOne']) {
     collector.handleMessage('Guild > [VIP] ChatSpoof: ignored');
     collector.handleMessage('§6Guild Master [1]');
@@ -255,6 +353,29 @@ function makeCommandInteraction(subcommand, userId = 'user') {
     };
     return { interaction, calls };
 }
+
+test('leaderboard replaces the thinking response when player data stalls', async () => {
+    const service = new LeaderboardService({
+        sendMinecraftCommand: () => {},
+        isMinecraftReady: () => true,
+        responseTimeoutMs: 5,
+    });
+    service.roster.getRoster = async () => ({ members: ['One'], observedAt: Date.now() });
+    service.startDatasetRefresh = () => new Promise(() => {});
+    const command = makeCommandInteraction('networth');
+    try {
+        await service.handleCommand(command.interaction);
+        assert.deepEqual(
+            command.calls.map(([method]) => method),
+            ['deferReply', 'editReply']
+        );
+        assert.match(command.calls[1][1].content, /still refreshing/);
+        assert.deepEqual(command.calls[1][1].components, []);
+        assert.equal(service.sessions.size, 0);
+    } finally {
+        service.stop();
+    }
+});
 
 function makePlayerInteraction(username, userId = 'player-user') {
     const result = makeCommandInteraction('player', userId);

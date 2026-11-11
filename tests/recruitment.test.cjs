@@ -28,6 +28,14 @@ const { DragSimLookupClient } = require('../dist/src/recruitment/api.js');
 
 const NOW = 1_000_000_000_000;
 
+test('recruitment API settles even when a stalled transport ignores abort', async () => {
+    const client = new DragSimLookupClient({
+        timeoutMs: 5,
+        fetcher: async () => new Promise(() => {}),
+    });
+    await assert.rejects(client.lookup('Applicant'), /timed out/);
+});
+
 function evidence(overrides = {}) {
     return {
         username: 'Applicant',

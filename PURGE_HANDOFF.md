@@ -1,5 +1,11 @@
 # Guild purge
 
+11 November follow-up: shared player-stat refresh stalls now have independent
+deadlines and retry recovery. Purge preview stops waiting after20 seconds and
+edits its deferred response with a clear failure; late snapshots cannot create
+a panel or issue kicks. Regression coverage passes. Release details are in
+ASTRA_HANDOFF.md; existing freshness, exclusions and confirmation checks remain.
+
 Updated 10 November 2026. Owner: Astra. Status: purge, permanent exclusions and staff-channel restriction pushed/deployed. Ben confirmed the purge panel works; all74 offline tests pass.
 
 ## Target and authority

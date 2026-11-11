@@ -1,6 +1,7 @@
 /* eslint-disable max-classes-per-file, no-await-in-loop, no-constant-condition */
 
 import env from '@util/env';
+import withTimeout from '@util/with-timeout';
 import { LeaderboardLookupClient, NetworthSnapshot, ProfileSnapshot } from './types';
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
@@ -212,72 +213,84 @@ export class DragSimLeaderboardClient implements LeaderboardLookupClient {
         if (url.protocol !== 'https:' || url.hostname !== this.baseUrl.hostname) {
             throw new Error('Leaderboard API request was outside the configured HTTPS host.');
         }
-        return this.limiter.run(async () => {
-            if (this.now() < this.retryAfterAt) throw new Error('Leaderboard API is rate limited.');
-            let retried = false;
-            while (true) {
-                const controller = new AbortController();
-                const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-                try {
-                    const response = await this.fetcher(url, {
-                        method: 'GET',
-                        redirect: 'error',
-                        signal: controller.signal,
-                        headers: { accept: 'application/json' },
-                    });
-                    const length = Number(response.headers.get('content-length'));
-                    if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
+        return this.limiter.run(() => {
+            const controllers = new Set<AbortController>();
+            return withTimeout(
+                this.fetchJson(url, controllers),
+                this.timeoutMs * 2 + MAX_RETRY_DELAY_MS,
+                'Leaderboard API request timed out.',
+                () => controllers.forEach((controller) => controller.abort())
+            );
+        });
+    }
+
+    private async fetchJson(url: URL, controllers: Set<AbortController>): Promise<JsonObject> {
+        if (this.now() < this.retryAfterAt) throw new Error('Leaderboard API is rate limited.');
+        let retried = false;
+        while (true) {
+            const controller = new AbortController();
+            controllers.add(controller);
+            const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+            try {
+                const response = await this.fetcher(url, {
+                    method: 'GET',
+                    redirect: 'error',
+                    signal: controller.signal,
+                    headers: { accept: 'application/json' },
+                });
+                const length = Number(response.headers.get('content-length'));
+                if (Number.isFinite(length) && length > MAX_RESPONSE_BYTES) {
+                    throw new Error('Leaderboard API response was too large.');
+                }
+                if (response.status === 429) {
+                    const retryAfter = this.retryDelay(response.headers.get('retry-after'));
+                    this.retryAfterAt = this.now() + retryAfter;
+                    await response.body?.cancel();
+                    if (retried || retryAfter > MAX_RETRY_DELAY_MS)
+                        throw new Error('Leaderboard API is rate limited.');
+                    retried = true;
+                    clearTimeout(timer);
+                    await this.sleep(retryAfter);
+                    continue;
+                }
+                if (!response.ok)
+                    throw new Error(`Leaderboard API returned HTTP ${response.status}.`);
+                if (!response.body) throw new Error('Leaderboard API returned no body.');
+                const reader = response.body.getReader();
+                const chunks: Uint8Array[] = [];
+                let bytes = 0;
+                // eslint-disable-next-line no-constant-condition
+                while (true) {
+                    // eslint-disable-next-line no-await-in-loop
+                    const { done, value } = await reader.read();
+                    if (done) break;
+                    bytes += value.byteLength;
+                    if (bytes > MAX_RESPONSE_BYTES) {
+                        // eslint-disable-next-line no-await-in-loop
+                        await reader.cancel();
                         throw new Error('Leaderboard API response was too large.');
                     }
-                    if (response.status === 429) {
-                        const retryAfter = this.retryDelay(response.headers.get('retry-after'));
-                        this.retryAfterAt = this.now() + retryAfter;
-                        await response.body?.cancel();
-                        if (retried || retryAfter > MAX_RETRY_DELAY_MS)
-                            throw new Error('Leaderboard API is rate limited.');
-                        retried = true;
-                        clearTimeout(timer);
-                        await this.sleep(retryAfter);
-                        continue;
-                    }
-                    if (!response.ok)
-                        throw new Error(`Leaderboard API returned HTTP ${response.status}.`);
-                    if (!response.body) throw new Error('Leaderboard API returned no body.');
-                    const reader = response.body.getReader();
-                    const chunks: Uint8Array[] = [];
-                    let bytes = 0;
-                    // eslint-disable-next-line no-constant-condition
-                    while (true) {
-                        // eslint-disable-next-line no-await-in-loop
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        bytes += value.byteLength;
-                        if (bytes > MAX_RESPONSE_BYTES) {
-                            // eslint-disable-next-line no-await-in-loop
-                            await reader.cancel();
-                            throw new Error('Leaderboard API response was too large.');
-                        }
-                        chunks.push(value);
-                    }
-                    let parsedValue: unknown;
-                    try {
-                        parsedValue = JSON.parse(Buffer.concat(chunks).toString('utf8'));
-                    } catch {
-                        throw new Error('Leaderboard API returned invalid JSON.');
-                    }
-                    const parsed = object(parsedValue);
-                    if (!parsed) throw new Error('Leaderboard API returned invalid JSON.');
-                    return parsed;
-                } catch (error) {
-                    if (error instanceof Error && error.name === 'AbortError') {
-                        throw new Error('Leaderboard API request timed out.');
-                    }
-                    throw error;
-                } finally {
-                    clearTimeout(timer);
+                    chunks.push(value);
                 }
+                let parsedValue: unknown;
+                try {
+                    parsedValue = JSON.parse(Buffer.concat(chunks).toString('utf8'));
+                } catch {
+                    throw new Error('Leaderboard API returned invalid JSON.');
+                }
+                const parsed = object(parsedValue);
+                if (!parsed) throw new Error('Leaderboard API returned invalid JSON.');
+                return parsed;
+            } catch (error) {
+                if (error instanceof Error && error.name === 'AbortError') {
+                    throw new Error('Leaderboard API request timed out.');
+                }
+                throw error;
+            } finally {
+                clearTimeout(timer);
+                controllers.delete(controller);
             }
-        });
+        }
     }
 
     private retryDelay(value: string | null) {

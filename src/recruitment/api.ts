@@ -1,4 +1,5 @@
 import env from '@util/env';
+import withTimeout from '@util/with-timeout';
 import { LookupClient, LookupEvidence } from './types';
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
@@ -149,6 +150,15 @@ export class DragSimLookupClient implements LookupClient {
             throw new Error('Recruitment API request was outside the configured HTTPS host.');
         }
         const controller = new AbortController();
+        return withTimeout(
+            this.fetchJson(url, controller),
+            this.timeoutMs,
+            'Recruitment API request timed out.',
+            () => controller.abort()
+        );
+    }
+
+    private async fetchJson(url: URL, controller: AbortController): Promise<JsonObject> {
         const timer = setTimeout(() => controller.abort(), this.timeoutMs);
         try {
             const response = await this.fetcher(url, {

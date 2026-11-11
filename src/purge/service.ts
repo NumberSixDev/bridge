@@ -19,6 +19,7 @@ import path from 'node:path';
 import winston from 'winston';
 import env from '@util/env';
 import isStaffCommandChannel from '@util/staff-command-channel';
+import withTimeout from '@util/with-timeout';
 import { formatAmount } from '../recruitment/amount';
 import { RecruitmentSettings } from '../recruitment/types';
 import {
@@ -71,6 +72,7 @@ export interface PurgeServiceOptions {
     dataDir?: string;
     now?: () => number;
     sleep?: (milliseconds: number) => Promise<void>;
+    snapshotTimeoutMs?: number;
 }
 
 interface FrozenTarget {
@@ -421,6 +423,7 @@ function formatAge(ageMs: number) {
 export default class PurgeService {
     private readonly getSettings: () => RecruitmentSettings;
     private readonly authorise: (interaction: PurgeInteraction) => Promise<boolean>;
+    private readonly snapshotTimeoutMs: number;
     private readonly getSnapshot: (forceRoster?: boolean) => Promise<LeaderboardPurgeSnapshot>;
     private readonly getRoster: (forceRefresh?: boolean) => Promise<GuildRoster>;
     private readonly lookupFresh: (username: string) => Promise<FreshPurgeEvidence>;
@@ -444,6 +447,7 @@ export default class PurgeService {
     private exclusionQueue: Promise<void> = Promise.resolve();
 
     public constructor(options: PurgeServiceOptions) {
+        this.snapshotTimeoutMs = options.snapshotTimeoutMs ?? 20_000;
         this.getSettings = options.getSettings;
         this.authorise = async (interaction) =>
             isStaffCommandChannel(interaction) && options.authoriseInteraction(interaction);
@@ -578,7 +582,11 @@ export default class PurgeService {
         }
         let snapshot: LeaderboardPurgeSnapshot;
         try {
-            snapshot = await this.getSnapshot(true);
+            snapshot = await withTimeout(
+                this.getSnapshot(true),
+                this.snapshotTimeoutMs,
+                'Player stats are still refreshing. Please try /purge again shortly.'
+            );
         } catch (error) {
             await interaction.editReply({
                 content: `Purge could not load a verified guild snapshot: ${

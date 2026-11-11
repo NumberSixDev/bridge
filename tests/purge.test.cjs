@@ -550,6 +550,30 @@ test('purge skips newly compliant targets, never adds newcomers and stops after 
     }
 });
 
+test('purge preview exits a stalled snapshot safely and ignores its late result', async () => {
+    const h = await harness();
+    const getSnapshot = h.service.getSnapshot;
+    let release;
+    h.service.getSnapshot = () =>
+        new Promise((resolve) => {
+            release = resolve;
+        });
+    h.service.snapshotTimeoutMs = 5;
+    const command = fakeCommand();
+    try {
+        await h.service.handleCommand(command);
+        assert.match(command.payload.content, /still refreshing/);
+        assert.deepEqual(command.payload.components, []);
+        const count = command.calls.length;
+        release(await getSnapshot(true));
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(command.calls.length, count);
+        assert.deepEqual(h.kicks(), []);
+    } finally {
+        h.service.stop();
+    }
+});
+
 test('purge independently rejects commands and controls outside the staff channel', async () => {
     const h = await harness();
     try {

@@ -190,6 +190,12 @@ served. The completed sanitized dataset is kept in the ignored
 permissions so a restart preserves age without persisting inventories or
 credentials.
 
+If fresh stats are unavailable, leaderboard searches stop waiting after fifteen
+seconds and purge previews after twenty seconds, with a retry message. Individual
+API reads and complete refreshes also have hard deadlines; a stalled refresh
+releases its shared slot so the next refresh can recover. Late results cannot
+replace a newer dataset. Existing data-age limits and purge checks still apply.
+
 ## Guild purge
 
 `/purge` is available only to the same configured Admin and Guild Master roles
