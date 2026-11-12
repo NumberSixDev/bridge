@@ -41,6 +41,7 @@ const MAX_FUTURE_SKEW_MS = 60_000;
 const CONFIRMATION_TTL_MS = 2 * 60_000;
 const PROBE_TIMEOUT_MS = 8_000;
 const JOB_TIMEOUT_MS = 5 * 60_000;
+const KICK_INTERVAL_MS = 1_000;
 const BUTTON_PATTERN =
     /^purge:([A-Za-z0-9_-]{1,80}):(prev|next|open|confirm|cancel|confirm-prev|confirm-next)(?::([A-Za-z0-9_-]{1,80}))?$/;
 const SELECT_PATTERN = /^purge:([A-Za-z0-9_-]{1,80}):select$/;
@@ -63,8 +64,6 @@ export interface PurgeServiceOptions {
     getSettings: () => RecruitmentSettings;
     authoriseInteraction: (interaction: PurgeInteraction) => Promise<boolean>;
     getSnapshot: (forceRoster?: boolean) => Promise<LeaderboardPurgeSnapshot>;
-    getRoster: (forceRefresh?: boolean) => Promise<GuildRoster>;
-    lookupFresh: (username: string) => Promise<FreshPurgeEvidence>;
     isMinecraftReady: () => boolean;
     getBotUsername: () => string | undefined;
     sendMinecraftCommand: (command: string) => void;
@@ -107,6 +106,7 @@ interface PurgeSession {
     minimumPurse: number;
     exclusionsRevision: number;
     rosterObservedAt: number;
+    guildMaster?: string;
     datasetCompletedAt: number;
     baseRows: PurgeRow[];
     rows: PurgeRow[];
@@ -124,10 +124,9 @@ interface ActiveJob {
 }
 
 interface PurgeCounts {
-    completed: number;
     sent: number;
     skipped: number;
-    unconfirmed: number;
+    failed: number;
     stopReason?: string;
 }
 
@@ -376,20 +375,6 @@ export function evaluateFreshPurgeEvidence(
     };
 }
 
-async function parallelMap<T, R>(items: T[], limit: number, worker: (item: T) => Promise<R>) {
-    const results: R[] = [];
-    let next = 0;
-    const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
-        while (true) {
-            const index = next++;
-            if (index >= items.length) return;
-            results[index] = await worker(items[index]!);
-        }
-    });
-    await Promise.all(workers);
-    return results;
-}
-
 function applyExclusions(rows: PurgeRow[], excluded: Set<string>): PurgeRow[] {
     return rows.map((row) => ({
         ...row,
@@ -425,8 +410,6 @@ export default class PurgeService {
     private readonly authorise: (interaction: PurgeInteraction) => Promise<boolean>;
     private readonly snapshotTimeoutMs: number;
     private readonly getSnapshot: (forceRoster?: boolean) => Promise<LeaderboardPurgeSnapshot>;
-    private readonly getRoster: (forceRefresh?: boolean) => Promise<GuildRoster>;
-    private readonly lookupFresh: (username: string) => Promise<FreshPurgeEvidence>;
     private readonly isMinecraftReady: () => boolean;
     private readonly getBotUsername: () => string | undefined;
     private readonly sendMinecraftCommand: (command: string) => void;
@@ -452,8 +435,6 @@ export default class PurgeService {
         this.authorise = async (interaction) =>
             isStaffCommandChannel(interaction) && options.authoriseInteraction(interaction);
         this.getSnapshot = options.getSnapshot;
-        this.getRoster = options.getRoster;
-        this.lookupFresh = options.lookupFresh;
         this.isMinecraftReady = options.isMinecraftReady;
         this.getBotUsername = options.getBotUsername;
         this.sendMinecraftCommand = options.sendMinecraftCommand;
@@ -616,6 +597,7 @@ export default class PurgeService {
             minimumPurse: settings.minimumPurse,
             exclusionsRevision: this.exclusionsRevision,
             rosterObservedAt: snapshot.roster.observedAt,
+            guildMaster: snapshot.roster.guildMaster,
             datasetCompletedAt: snapshot.dataset.completedAt,
             baseRows,
             rows: applyExclusions(baseRows, this.excluded),
@@ -822,10 +804,8 @@ export default class PurgeService {
         session: PurgeSession,
         interaction: ButtonInteraction<'cached'>
     ) {
-        const generation = this.lifecycleGeneration;
-        const { exclusionsRevision } = this;
-        const deadline = this.now() + 3 * 60_000;
-        if (!this.sessionSettingsCurrent(session)) {
+        const settings = this.getSettings();
+        if (!validSettings(settings) || !this.sessionSettingsCurrent(session)) {
             session.notice = 'Recruitment minimums changed. Run /purge again before confirming.';
             await interaction.editReply(this.panelPayload(session));
             return;
@@ -845,124 +825,34 @@ export default class PurgeService {
             await interaction.editReply(this.panelPayload(session));
             return;
         }
-        const initialCandidates = session.rows
-            .filter((row) => row.baseStatus === 'eligible' && row.status !== 'excluded')
-            .map((row) => row.username);
-        if (!initialCandidates.length) {
-            session.notice = 'There are no currently eligible, non-excluded members to purge.';
-            await interaction.editReply(this.panelPayload(session));
-            return;
-        }
-        let roster: GuildRoster;
-        try {
-            roster = await this.getRoster(true);
-        } catch (error) {
-            session.notice = `Fresh guild membership could not be verified: ${
-                error instanceof Error ? error.message : 'try again shortly.'
-            }`;
-            await interaction.editReply(this.panelPayload(session));
-            return;
-        }
-        const currentNames = new Map(roster.members.map((name) => [name.toLowerCase(), name]));
-        const candidates = initialCandidates.filter((name) => {
-            const current = currentNames.get(name.toLowerCase());
-            return Boolean(
-                current &&
-                    !permanentlyExcluded(current) &&
-                    !this.excluded.has(name.toLowerCase()) &&
-                    !sameUsername(roster.guildMaster, current) &&
-                    !sameUsername(this.getBotUsername(), current)
-            );
-        });
-        const results = await parallelMap(candidates, 2, async (username) => {
-            try {
-                if (
-                    this.stopped ||
-                    generation !== this.lifecycleGeneration ||
-                    this.now() >= deadline
-                )
-                    throw new Error('The purge preflight stopped or reached its time limit.');
-                const evidence = await this.lookupFresh(username);
-                return {
-                    username,
-                    evaluation: evaluateFreshPurgeEvidence(
-                        username,
-                        evidence,
-                        this.getSettings(),
-                        this.now()
-                    ),
-                };
-            } catch (error) {
-                return {
-                    username,
-                    evaluation: {
-                        eligible: false,
-                        reviewOnly: true,
-                        reason: error instanceof Error ? error.message : 'Fresh lookup failed.',
-                    },
-                };
-            }
-        });
-        const settings = this.getSettings();
-        if (
-            this.stopped ||
-            generation !== this.lifecycleGeneration ||
-            !this.isMinecraftReady() ||
-            !this.kickSyntax ||
-            this.exclusionWrites ||
-            this.storageIssue ||
-            !validSettings(settings) ||
-            !this.sessionSettingsCurrent(session) ||
-            exclusionsRevision !== this.exclusionsRevision
-        ) {
-            this.syncSession(session);
-            session.notice = 'Recruitment minimums changed during preflight. Run /purge again.';
-            await interaction.editReply(this.panelPayload(session));
-            return;
-        }
-        const evaluations = new Map(
-            results.map((result) => [result.username.toLowerCase(), result.evaluation])
-        );
-        session.baseRows = session.baseRows.flatMap((row) => {
-            const evaluation = evaluations.get(row.username.toLowerCase());
-            if (!evaluation) return [row];
-            if (!evaluation.eligible && !evaluation.reviewOnly) return [];
-            const baseStatus: PurgeBaseStatus = evaluation.reviewOnly ? 'review' : 'eligible';
-            return [
-                {
-                    ...row,
-                    baseStatus,
-                    status: baseStatus,
-                    networth: evaluation.networth,
-                    purse: evaluation.purse,
-                    networthApproximate: evaluation.approximate,
-                    reason: evaluation.reason,
-                },
-            ];
-        });
-        session.rows = applyExclusions(session.baseRows, this.excluded);
-        session.page = Math.min(session.page, pageCount(session.rows) - 1);
-        const targets = results.flatMap(({ username, evaluation }) => {
+        // Freeze the reviewed values. Confirmation and execution must not refetch
+        // player evidence or silently change the administrator's selected list.
+        this.syncSession(session);
+        const targets = session.rows.flatMap((row): FrozenTarget[] => {
             if (
-                !evaluation.eligible ||
-                evaluation.networth === undefined ||
-                evaluation.purse === undefined
+                row.baseStatus !== 'eligible' ||
+                row.status === 'excluded' ||
+                !isValidMinecraftUsername(row.username) ||
+                permanentlyExcluded(row.username) ||
+                this.excluded.has(row.username.toLowerCase()) ||
+                sameUsername(session.guildMaster, row.username) ||
+                sameUsername(this.getBotUsername(), row.username) ||
+                !finiteAmount(row.networth) ||
+                !finiteAmount(row.purse)
             )
                 return [];
-            const currentUsername = currentNames.get(username.toLowerCase()) ?? username;
             return [
                 {
-                    username: currentUsername,
-                    networth: evaluation.networth,
-                    purse: evaluation.purse,
-                    approximate: evaluation.approximate === true,
-                    checkedAt: this.now(),
+                    username: row.username,
+                    networth: row.networth,
+                    purse: row.purse,
+                    approximate: row.networthApproximate === true,
+                    checkedAt: session.datasetCompletedAt,
                 },
             ];
         });
         if (!targets.length) {
-            session.notice =
-                'No members remain eligible after fresh checks. Unavailable, private or stale values require review.';
+            session.notice = 'There are no eligible, non-excluded members in this review list.';
             await interaction.editReply(this.panelPayload(session));
             return;
         }
@@ -1047,7 +937,7 @@ export default class PurgeService {
         let counts: PurgeCounts;
         try {
             await interaction.editReply(this.panelPayload(session));
-            counts = await this.executeJob(job, pending.targets, pending, interaction);
+            counts = await this.executeJob(job, pending.targets, pending, session.guildMaster);
         } finally {
             if (this.activeJob === job) this.activeJob = undefined;
         }
@@ -1060,110 +950,59 @@ export default class PurgeService {
         job: ActiveJob,
         targets: FrozenTarget[],
         pending: PendingConfirmation,
-        interaction: ButtonInteraction<'cached'>
+        guildMaster?: string
     ): Promise<PurgeCounts> {
-        const counts: PurgeCounts = { completed: 0, sent: 0, skipped: 0, unconfirmed: 0 };
-        const deadline = job.startedAt + JOB_TIMEOUT_MS;
+        const counts: PurgeCounts = { sent: 0, skipped: 0, failed: 0 };
+        const deadline =
+            job.startedAt + Math.max(JOB_TIMEOUT_MS, targets.length * KICK_INTERVAL_MS + 30_000);
+        let lastSentAt: number | undefined;
         for (const target of targets) {
+            if (
+                !isValidMinecraftUsername(target.username) ||
+                permanentlyExcluded(target.username) ||
+                sameUsername(guildMaster, target.username) ||
+                sameUsername(this.getBotUsername(), target.username) ||
+                this.excluded.has(target.username.toLowerCase())
+            ) {
+                counts.skipped += 1;
+                continue;
+            }
+            if (lastSentAt !== undefined) {
+                const remaining = Math.min(
+                    KICK_INTERVAL_MS,
+                    Math.max(0, KICK_INTERVAL_MS - (this.now() - lastSentAt))
+                );
+                if (remaining > 0) await this.sleep(remaining);
+            }
             if (this.now() > deadline) {
                 counts.stopReason = 'The bounded purge time limit was reached.';
                 break;
             }
-            if (!this.jobCanContinue(job, pending) || !(await this.authorise(interaction))) {
-                counts.stopReason =
-                    'Authority, settings, exclusions, connection or shutdown state changed.';
+            // Roles were freshly checked on the confirmation interaction. These
+            // local guards remain immediate; no network calls sit between kicks.
+            if (!this.jobCanContinue(job, pending) || !this.kickSyntax) {
+                counts.stopReason = 'Settings, exclusions, connection or shutdown state changed.';
                 break;
             }
-            let roster: GuildRoster;
-            try {
-                roster = await this.getRoster(true);
-            } catch (error) {
-                counts.stopReason = `Guild membership could not be verified: ${
-                    error instanceof Error ? error.message : 'unknown error'
-                }`;
-                break;
-            }
-            const current = roster.members.find((name) => sameUsername(name, target.username));
             if (
-                !current ||
-                permanentlyExcluded(current) ||
-                sameUsername(roster.guildMaster, current) ||
-                sameUsername(this.getBotUsername(), current)
+                permanentlyExcluded(target.username) ||
+                this.excluded.has(target.username.toLowerCase()) ||
+                sameUsername(this.getBotUsername(), target.username)
             ) {
                 counts.skipped += 1;
                 continue;
             }
-            if (this.excluded.has(current.toLowerCase())) {
-                counts.skipped += 1;
-                continue;
-            }
-            let check: PurgeFreshEvaluation;
             try {
-                check = evaluateFreshPurgeEvidence(
-                    current,
-                    await this.lookupFresh(current),
-                    this.getSettings(),
-                    this.now()
-                );
-            } catch (error) {
-                check = {
-                    eligible: false,
-                    reviewOnly: true,
-                    reason: error instanceof Error ? error.message : 'Fresh lookup failed.',
-                };
-            }
-            if (!check.eligible || check.reviewOnly) {
-                counts.skipped += 1;
-                continue;
-            }
-            if (
-                !this.jobCanContinue(job, pending) ||
-                !(await this.authorise(interaction)) ||
-                !this.jobCanContinue(job, pending) ||
-                !this.kickSyntax ||
-                this.now() > deadline
-            ) {
-                counts.stopReason =
-                    'Authority, settings, exclusions or connection changed before sending a kick.';
-                break;
-            }
-            if (!isValidMinecraftUsername(current) || permanentlyExcluded(current)) {
-                counts.skipped += 1;
-                continue;
-            }
-            const command = `/${this.kickSyntax} kick ${current}`;
-            try {
-                this.sendMinecraftCommand(command);
+                this.sendMinecraftCommand(`/${this.kickSyntax} kick ${target.username}`);
+                lastSentAt = this.now();
                 counts.sent += 1;
             } catch (error) {
-                counts.unconfirmed += 1;
-                counts.stopReason = `Kick command could not be sent for ${current}: ${
+                counts.failed += 1;
+                counts.stopReason = `Kick command could not be sent for ${target.username}: ${
                     error instanceof Error ? error.message : 'unknown error'
                 }`;
                 break;
             }
-            await this.sleep(1_000);
-            if (!this.jobCanContinue(job, pending)) {
-                counts.unconfirmed += 1;
-                counts.stopReason = `Kick for ${current} was sent but the job lost authority or connection before verification.`;
-                break;
-            }
-            let after: GuildRoster;
-            try {
-                after = await this.getRoster(true);
-            } catch (error) {
-                counts.unconfirmed += 1;
-                counts.stopReason = `Kick for ${current} was sent but membership could not be verified: ${
-                    error instanceof Error ? error.message : 'unknown error'
-                }`;
-                break;
-            }
-            if (after.members.some((name) => sameUsername(name, current))) {
-                counts.unconfirmed += 1;
-                counts.stopReason = `Kick for ${current} was sent but the player is still present; remaining targets were stopped.`;
-                break;
-            }
-            counts.completed += 1;
         }
         return counts;
     }
@@ -1188,7 +1027,7 @@ export default class PurgeService {
 
     private jobSummary(counts: PurgeCounts) {
         const suffix = counts.stopReason ? ` Stopped: ${counts.stopReason}` : '';
-        return `Purge result: **${counts.completed} removed**, ${counts.sent} command(s) sent, ${counts.skipped} skipped, ${counts.unconfirmed} unconfirmed.${suffix}`;
+        return `Purge result: **${counts.sent} kick command(s) sent**, ${counts.skipped} skipped, ${counts.failed} send failures.${suffix}`;
     }
 
     private syncSession(session: PurgeSession) {
@@ -1360,7 +1199,7 @@ export default class PurgeService {
             `Thresholds: networth **${formatAmount(
                 pending.minimumNetworth
             )}**, purse **${formatAmount(pending.minimumPurse)}**.`,
-            'Fresh public evidence was checked. Newly qualifying or newly joined members cannot be added.',
+            'Uses the values in the review panel. Sends one kick per second for this exact list.',
             pending.targets.some((target) => target.approximate)
                 ? '≈ At least one target uses an explicitly allowed partial networth estimate.'
                 : undefined,

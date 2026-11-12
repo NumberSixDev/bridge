@@ -1,5 +1,15 @@
 # Guild purge
 
+## Current execution policy, 12 November 2026
+
+-   Ben explicitly requested kicking the list already provided, without repeated player API lookups or post-kick roster checks. This supersedes the historical fresh preflight and per-player verification policy below.
+-   Opening Purge freezes eligible, non-excluded rows from the displayed panel. Admin/Guild Master roles and staff channel are checked on the confirmation interaction. The same actor, nonce, expiry and single-job rules remain.
+-   First command is immediate; later commands are paced at1000ms from the preceding send. There is no final delay, no per-player REST role lookup and no roster/player lookup during confirmation or execution. Result wording counts commands sent rather than asserting confirmed removals.
+-   Permanent exclusions, bot/Guild Master protection, settings/exclusion changes, disconnect/shutdown and send failures still guard local dispatch. No new target can be added to the confirmed list. Missing/private/unusable values remain review-only at panel creation.
+-   Build/all95 tests pass. Fault/guard cases and a60-target virtual timing test pass; the production timer measured1002ms and1001ms between mocked sends. No real kick was issued. Release pending.
+
+## Historical implementation and verification
+
 11 November follow-up: shared player-stat refresh stalls now have independent
 deadlines and retry recovery. Purge preview stops waiting after20 seconds and
 edits its deferred response with a clear failure; late snapshots cannot create

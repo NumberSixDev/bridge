@@ -1,3 +1,10 @@
+# Purge pacing, 12 November 2026
+
+Ben explicitly replaced repeat player/roster verification with dispatch from the
+reviewed and confirmed list, one kick per second. See PURGE_HANDOFF.md for the
+current policy and tests; its new section supersedes older fresh-preflight and
+per-kick verification descriptions. Release pending; no real purge was tested.
+
 # Stalled searches, 11 November 2026
 
 -   Incident: both purge and leaderboards stayed on Discord's deferred response. The counted guild roster continued updating, but the shared player-stat dataset remained at06:26 until the service was restarted around20:49. Fresh cache writes resumed at20:50 and20:55. The exact internal await was not captured; the refresh, API body reads and cache writes had no independent hard completion deadline.

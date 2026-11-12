@@ -273,7 +273,7 @@ test('purge exclusions are private, atomic, scoped and fail closed on corruption
     assert.throws(() => store.load('12345678901234567'), /JSON|schema/);
 });
 
-test('purge keeps the panel review-only until confirmation and verifies roster removal after each command', async () => {
+test('purge keeps the panel review-only until confirmation and dispatches the reviewed list', async () => {
     let currentRoster = {
         members: ['Master', 'Low', 'Good'],
         guildMaster: 'Master',
@@ -337,7 +337,7 @@ test('purge keeps the panel review-only until confirmation and verifies roster r
     const confirm = componentInteraction(confirmId);
     await service.handleInteraction(confirm);
     assert.deepEqual(commands, ['/g help', '/g kick Low']);
-    assert.match(confirm.payload.embeds[0].data.description, /1 removed/);
+    assert.match(confirm.payload.embeds[0].data.description, /1 kick command\(s\) sent/);
     currentTime += 11 * 60_000;
     const expired = componentInteraction(purgeButton);
     await service.handleInteraction(expired);
@@ -355,7 +355,7 @@ function control(payload, action) {
 
 async function harness(options = {}) {
     const state = {
-        now: NOW,
+        now: options.realTime ? Date.now() : NOW,
         allowed: true,
         ready: true,
         settings: settings(),
@@ -363,6 +363,13 @@ async function harness(options = {}) {
         members: ['Master', ...(options.members || ['Low', 'Other'])],
         removeOnKick: true,
         lookupHook: undefined,
+        sleepHook: undefined,
+        sendHook: undefined,
+        kickTimes: [],
+        sleeps: [],
+        lookups: 0,
+        rosterReads: 0,
+        authorisations: 0,
     };
     const store = options.store || new MemoryPurgeStore();
     const roster = () => ({
@@ -372,7 +379,10 @@ async function harness(options = {}) {
     });
     const service = new PurgeService({
         getSettings: () => state.settings,
-        authoriseInteraction: async () => state.allowed,
+        authoriseInteraction: async () => {
+            state.authorisations++;
+            return state.allowed;
+        },
         getSnapshot: async () => ({
             roster: roster(),
             dataset: dataset(
@@ -380,8 +390,12 @@ async function harness(options = {}) {
                 { completedAt: state.now }
             ),
         }),
-        getRoster: async () => roster(),
+        getRoster: async () => {
+            state.rosterReads++;
+            return roster();
+        },
         lookupFresh: async (username) => {
+            state.lookups++;
             if (state.lookupHook) return state.lookupHook(username);
             const value = evidence(username);
             value.profile.observedAt = state.now;
@@ -392,13 +406,24 @@ async function harness(options = {}) {
         isMinecraftReady: () => state.ready,
         getBotUsername: () => 'Bot',
         sendMinecraftCommand: (command) => {
+            if (state.sendHook) state.sendHook(command);
             state.calls.push(command);
+            if (command.includes(' kick '))
+                state.kickTimes.push(options.realTime ? Date.now() : state.now);
             if (state.removeOnKick && command.startsWith('/g kick '))
                 state.members = state.members.filter((name) => name !== command.slice(8));
         },
         store,
-        now: () => state.now,
-        sleep: async () => {},
+        now: () => (options.realTime ? Date.now() : state.now),
+        ...(options.realTime
+            ? {}
+            : {
+                  sleep: async (milliseconds) => {
+                      state.sleeps.push(milliseconds);
+                      state.now += milliseconds;
+                      if (state.sleepHook) await state.sleepHook();
+                  },
+              }),
     });
     await service.onMinecraftReady();
     service.handleMinecraftMessage('/g kick <player> - kick a member');
@@ -500,53 +525,112 @@ test('purge invalidates confirmations when minimums or exclusions change and can
     }
 });
 
-test('purge blocks destructive dispatch when authority or requirements change during a fresh lookup', async () => {
-    for (const change of ['roles', 'minimums', 'disconnect', 'shutdown']) {
+test('purge stops before the next kick if local settings, exclusions or connection change', async () => {
+    for (const change of ['minimums', 'exclusions', 'disconnect', 'shutdown']) {
         const h = await harness();
         try {
             const prepared = await h.prepare();
-            h.state.lookupHook = async (username) => {
-                if (change === 'roles') h.state.allowed = false;
-                if (change === 'minimums')
-                    h.state.settings = settings({
-                        minimumNetworth: 1,
-                        minimumPurse: 1,
-                        revision: 2,
-                    });
+            h.state.sleepHook = async () => {
+                if (change === 'minimums') h.state.settings = settings({ revision: 2 });
+                if (change === 'exclusions') await h.select(h.command.payload, 'Other');
                 if (change === 'disconnect') h.service.onMinecraftDisconnected();
                 if (change === 'shutdown') h.service.stop();
-                return evidence(username);
             };
             await h.click(prepared.payload, 'confirm');
-            assert.equal(h.kicks().length, 0, change);
+            assert.deepEqual(h.kicks(), ['/g kick Low'], change);
         } finally {
             h.service.stop();
         }
     }
 });
 
-test('purge skips newly compliant targets, never adds newcomers and stops after an unconfirmed kick', async () => {
+test('purge freezes the reviewed list without further roster or player API checks', async () => {
     const h = await harness();
     try {
+        h.state.lookupHook = async () => {
+            throw Error('Player API must not be queried');
+        };
         const prepared = await h.prepare();
         h.state.members.push('Newcomer');
-        h.state.lookupHook = async (username) =>
-            username === 'Low'
-                ? evidence(username, {
-                      profile: { ...evidence(username).profile, profile: { coins: 100 } },
-                      networth: { ...evidence(username).networth, total: 200 },
-                  })
-                : evidence(username);
         h.state.removeOnKick = false;
+        const authBefore = h.state.authorisations;
         const result = await h.click(prepared.payload, 'confirm');
-        assert.deepEqual(h.kicks(), ['/g kick Other']);
-        assert.match(
-            result.payload.embeds[0].data.description,
-            /0 removed.*1 skipped.*1 unconfirmed/
-        );
+        assert.deepEqual(h.kicks(), ['/g kick Low', '/g kick Other']);
+        assert.equal(h.state.lookups, 0);
+        assert.equal(h.state.rosterReads, 0);
+        assert.equal(h.state.authorisations - authBefore, 1);
+        assert.match(result.payload.embeds[0].data.description, /2 kick command\(s\) sent/);
+        assert.doesNotMatch(result.payload.embeds[0].data.description, /\d+ removed/);
         assert.ok(h.state.members.includes('Newcomer'));
     } finally {
         h.service.stop();
+    }
+});
+
+test('purge sends sixty reviewed targets one second apart with no final delay', async () => {
+    const members = Array.from({ length: 60 }, (_, i) => `Member${String(i).padStart(2, '0')}`);
+    const h = await harness({ members });
+    try {
+        const prepared = await h.prepare();
+        const started = h.state.now;
+        await h.click(prepared.payload, 'confirm');
+        assert.deepEqual(
+            h.kicks(),
+            members.map((name) => `/g kick ${name}`)
+        );
+        assert.equal(h.state.now - started, 59_000);
+        assert.deepEqual(h.state.sleeps, Array(59).fill(1_000));
+        assert.deepEqual(
+            h.state.kickTimes,
+            members.map((_, i) => started + i * 1_000)
+        );
+        assert.equal(h.state.lookups, 0);
+        assert.equal(h.state.rosterReads, 0);
+    } finally {
+        h.service.stop();
+    }
+});
+
+test('purge production timer spaces mocked commands by at least one second', async () => {
+    const h = await harness({ members: ['One', 'Two', 'Three'], realTime: true });
+    try {
+        const prepared = await h.prepare();
+        await h.click(prepared.payload, 'confirm');
+        assert.equal(h.state.kickTimes.length, 3);
+        const gaps = h.state.kickTimes.slice(1).map((time, i) => time - h.state.kickTimes[i]);
+        assert.ok(
+            gaps.every((gap) => gap >= 1_000),
+            `Observed kick gaps: ${gaps}`
+        );
+        console.info(
+            `Offline purge pacing: ${gaps.join('ms, ')}ms; no network calls or real kicks.`
+        );
+    } finally {
+        h.service.stop();
+    }
+});
+
+test('purge checks administrator access on confirmation and stops on a send failure', async () => {
+    const denied = await harness();
+    try {
+        const prepared = await denied.prepare();
+        denied.state.allowed = false;
+        await denied.click(prepared.payload, 'confirm');
+        assert.deepEqual(denied.kicks(), []);
+    } finally {
+        denied.service.stop();
+    }
+    const failed = await harness();
+    try {
+        const prepared = await failed.prepare();
+        failed.state.sendHook = () => {
+            throw Error('Connection lost');
+        };
+        const result = await failed.click(prepared.payload, 'confirm');
+        assert.deepEqual(failed.kicks(), []);
+        assert.match(result.payload.embeds[0].data.description, /1 send failures/);
+    } finally {
+        failed.service.stop();
     }
 });
 

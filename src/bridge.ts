@@ -43,8 +43,6 @@ export default class Bridge {
         getSettings: () => this.recruitment.settings,
         authoriseInteraction: (interaction) => this.recruitment.authoriseInteraction(interaction),
         getSnapshot: (forceRoster) => this.leaderboard.getPurgeSnapshot(forceRoster),
-        getRoster: (forceRefresh) => this.leaderboard.getRoster(forceRefresh),
-        lookupFresh: (username) => this.leaderboard.lookupFreshPurgeEvidence(username),
         isMinecraftReady: () => this.mineflayer.isReady,
         getBotUsername: () => this.mineflayer.username,
         sendMinecraftCommand: (command) => this.mineflayer.execute(command),

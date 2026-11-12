@@ -206,12 +206,18 @@ stale or incomplete evidence is review-only; set `PURGE_ALLOW_PARTIAL_NETWORTH=t
 only when approximate valuations are acceptable for your policy.
 
 The bridge verifies a real `/g kick <player>` or `/guild kick <player>` entry
-from the server's help output before enabling the red Purge button. Purge first
-rechecks the roster and official main-profile evidence, then shows a frozen
-target list in a separate confirmation. No member is kicked by opening the
-panel or pressing Purge. Confirmation is bound to the authorised user and
-rechecks roles, settings, exclusions, membership and data before each paced
-command; a missing post-command roster confirmation stops the remaining job.
+from the server's help output before enabling the red Purge button. Purge uses
+the eligible, non-excluded names already shown in the review panel and shows
+that exact list in a separate confirmation. No member is kicked by opening the
+panel or pressing Purge. Confirmation is bound to the authorised user, with a
+fresh Admin/Guild Master role check on the confirmation click.
+
+After confirmation, the first kick is sent immediately and subsequent kicks
+are spaced one second apart. There are no further player API lookups or guild
+list checks during confirmation or execution. The result reports commands sent,
+not verified removals. Permanent exclusions, bot/Guild Master protection and
+local settings/exclusion checks remain; disconnect, shutdown or a send failure
+stops the job. A batch of60 players takes about59 seconds after dispatch starts.
 
 ## Optional staff commands
 
