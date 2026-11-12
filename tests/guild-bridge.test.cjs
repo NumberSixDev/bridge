@@ -475,13 +475,15 @@ test('Mineflayer starts only on connect, waits for spawn, sends /gc, deduplicate
     const originalClearTimeout = global.clearTimeout;
     const retryCallbacks = [];
     let retryCleared = false;
-    global.setTimeout = (callback) => {
+    global.setTimeout = (callback, delay, ...args) => {
+        if (delay !== 5_000) return originalSetTimeout(callback, delay, ...args);
         const timer = { fakeRetry: true };
         retryCallbacks.push({ callback, timer });
         return timer;
     };
     global.clearTimeout = (timer) => {
         if (timer?.fakeRetry) retryCleared = true;
+        else originalClearTimeout(timer);
     };
     try {
         const clients = [];

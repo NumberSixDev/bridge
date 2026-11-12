@@ -1,3 +1,10 @@
+# Pre-socket login recovery, 12 November 2026
+
+-   Incident evidence: a network timeout at10:18 was followed by a failed Minecraft profile lookup at10:19. At inspection the original runtime was still alive but unready in handshaking, with no socket and no reconnect timer. The error handler called end(), which does not emit end before a socket exists; retries were only scheduled by end. Restart restored the connection and AFK, confirming no new account/sign-in was needed.
+-   Fix: independently retire failed/kicked/ended clients once, clear readiness/AFK/service state, and retry at5/10/20/40/60 seconds. Client creation and setup failures use the same recovery; a60-second login/setup deadline handles silence. Successful readiness resets backoff. Per-client socket guards reject late authentication/DNS connections from retired attempts. Stop cancels timers and prevents resurrection.
+-   Disabled the protocol library's unbounded stdout diagnostics for ignored partial packets; the old particle-message flood had grown launchd.log to1.5GB. Fatal errors still reach the bridge's logged error handler. Existing logs were preserved; no dependency, credentials or power settings changed.
+-   Build/all108 tests, formatting/lint and configuration pass, including the exact no-socket/no-end failure, duplicate error/end events, stalled login, late sockets/spawns, creation backoff, readiness reset, stopped callbacks and hub timeout. Release/live failure-path verification pending.
+
 # Continuous AFK rewards, 12 November 2026
 
 -   Ben authorised maintaining `/afk` across disconnects and lobby changes. Live probe on the existing account confirmed an NBT-titled `AFK Rewards · mm:ss` GUI and server notices stating that closing it stops rewards; keeping it open earns a random Dragon Loot Credit every15 minutes. A read-only guild roster request completed with115 members while the AFK menu stayed open. Reward receipt itself has not yet been observed.

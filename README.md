@@ -17,7 +17,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Does not relay public Minecraft chat, officer chat, private messages or unrecognised guild announcements.
 -   Disables Discord mention notifications in relayed messages.
 -   Rejects messages exceeding Minecraft's 256-character limit, including `/gc `, the author and separator.
--   Reconnects after a connection ends and supports optional guild reminders.
+-   Retries disconnects, login failures and stalled setup automatically, and supports optional guild reminders.
 -   Records guild join applications with profile summaries and persistent Accept/Deny controls.
 -   Supports a persistent recruitment settings panel with optional thresholded automatic acceptance.
 -   Provides public `/gleaderboard` rankings for current Minecraft guild members with paginated buttons.
@@ -199,6 +199,13 @@ releases its shared slot so the next refresh can recover. Late results cannot
 replace a newer dataset. Existing data-age limits and purge checks still apply.
 
 ## AFK rewards
+
+Minecraft recovery starts with a five-second retry delay, increasing to at most
+sixty seconds for repeated failures and resetting after a successful join.
+Login/setup attempts have a sixty-second deadline, including failures before a
+socket exists. Retired attempts cannot attach late sockets or replace the active
+connection. A server/network outage can still interrupt relay; recovery keeps
+retrying without requiring a process restart.
 
 With `MINECRAFT_AFK_ENABLED=true`, the bridge runs `/afk` after joining the hub
 and keeps the observed AFK Rewards menu open. DragSim says this menu must stay
