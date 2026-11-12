@@ -43,6 +43,7 @@ export const envSchema = z
             ])
             .default(''),
         MINECRAFT_CHAT_SEPARATOR: z.string().trim().min(1).max(10).default('>'),
+        MINECRAFT_AFK_ENABLED: boolean.default(false),
         USE_PROFANITY_FILTER: boolean.default(true),
         USE_FIRST_WORD_OF_AUTHOR_NAME: boolean.default(false),
         RECRUITMENT_DATA_DIR: z.string().trim().min(1).default('.bridge-data'),

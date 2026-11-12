@@ -7,6 +7,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 
 -   Connects to `dragsim.co` using a Minecraft Java account and Microsoft sign-in.
 -   Acknowledges the server resource pack and uses `/warp hub` to leave the profile selector before enabling guild chat.
+-   Optionally keeps `/afk` rewards active, restoring the AFK menu after closure, reconnect or lobby transfer.
 -   Sends Discord messages as `/gc DisplayName > message`.
 -   Recognises guild messages with optional server-rank prefixes and guild-role suffixes, such as `Guild > [MOD] DragSim [GM]: hello`, as well as unranked players. Any bracketed tags are supported, including multiple tags together.
 -   Everyone with access to the configured Discord channel can use the bridge.
@@ -58,6 +59,7 @@ Edit the local `.env` file:
 | `MINECRAFT_VERSION`            | `1.21.4`, or another confirmed compatible version                                                   |
 | `MINECRAFT_CHAT_COMMAND`       | `/gc`                                                                                               |
 | `MINECRAFT_JOIN_COMMAND`       | `/warp hub` to leave DragSim's profile selector                                                     |
+| `MINECRAFT_AFK_ENABLED`        | `true` to keep the AFK Rewards menu open; defaults to `false`                                       |
 | `MINECRAFT_EMAIL`              | Microsoft account email for the bot                                                                 |
 | `DISCORD_TOKEN`                | Discord bot token                                                                                   |
 | `DISCORD_SERVER_ID`            | The Discord server ID                                                                               |
@@ -195,6 +197,21 @@ seconds and purge previews after twenty seconds, with a retry message. Individua
 API reads and complete refreshes also have hard deadlines; a stalled refresh
 releases its shared slot so the next refresh can recover. Late results cannot
 replace a newer dataset. Existing data-age limits and purge checks still apply.
+
+## AFK rewards
+
+With `MINECRAFT_AFK_ENABLED=true`, the bridge runs `/afk` after joining the hub
+and keeps the observed AFK Rewards menu open. DragSim says this menu must stay
+open to earn a random Dragon Loot Credit every fifteen minutes. Existing guild
+commands still work while the menu is open.
+
+The bridge restores AFK after a reconnect, lobby spawn or closed/replaced menu.
+A ten-second watchdog catches a missing menu even if no close event arrives.
+It waits for transfers to settle and spaces unsuccessful attempts by at least
+fifteen seconds. It does not re-send `/afk` while the reward menu is healthy,
+so ordinary timer updates do not reset progress. Shutdown stops its timers;
+the existing Mac LaunchAgent resumes it when the bridge starts again.
+This requires the Mac and network to remain available; no power settings are changed.
 
 ## Guild purge
 

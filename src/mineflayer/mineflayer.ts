@@ -5,6 +5,7 @@ import path from 'path';
 import loadEvents from '@util/load-events';
 import { guildCommand, singleLine } from '@util/guild-chat';
 import Bridge from '../bridge';
+import AfkKeeper from './afk';
 
 export default class Mineflayer {
     private bot?: Bot;
@@ -13,6 +14,7 @@ export default class Mineflayer {
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
     private joinTimer?: NodeJS.Timeout;
+    private afk?: AfkKeeper;
 
     constructor(private readonly createClient: typeof createBot = createBot) {}
 
@@ -61,6 +63,8 @@ export default class Mineflayer {
             if (this.bot !== bot) return;
             this.bot = undefined;
             this.ready = false;
+            this.afk?.stop();
+            this.afk = undefined;
             bridge.leaderboard?.onMinecraftDisconnected();
             bridge.purge?.onMinecraftDisconnected();
             clearInterval(this.reminderTimer);
@@ -124,6 +128,15 @@ export default class Mineflayer {
     private async onReady(bot: Bot, bridge: Bridge) {
         if (this.bot !== bot || this.stopping) return;
         this.ready = true;
+        if (env.MINECRAFT_AFK_ENABLED) {
+            this.afk?.stop();
+            this.afk = new AfkKeeper({
+                bot,
+                isReady: () => this.bot === bot && this.isReady,
+                sendCommand: () => this.execute('/afk'),
+            });
+            this.afk.start();
+        }
         winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
         await bridge.recruitment?.onMinecraftReady();
         await bridge.leaderboard?.onMinecraftReady();
@@ -157,6 +170,8 @@ export default class Mineflayer {
     public stop() {
         this.stopping = true;
         this.ready = false;
+        this.afk?.stop();
+        this.afk = undefined;
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = undefined;
         clearInterval(this.reminderTimer);

@@ -1,3 +1,9 @@
+# Continuous AFK rewards, 12 November 2026
+
+-   Ben authorised maintaining `/afk` across disconnects and lobby changes. Live probe on the existing account confirmed an NBT-titled `AFK Rewards · mm:ss` GUI and server notices stating that closing it stops rewards; keeping it open earns a random Dragon Loot Credit every15 minutes. A read-only guild roster request completed with115 members while the AFK menu stayed open. Reward receipt itself has not yet been observed.
+-   Added an opt-in AFK keeper after normal hub readiness. It watches spawn/respawn/window events and checks for a missing menu every10 seconds, with2-second settling and15-second retry spacing. Healthy reward menus, including title/countdown replacements, are left untouched. Disconnect/stop removes timers and listeners; a new connection creates a fresh keeper. No inventory clicks, claiming commands or new account connections.
+-   Build/all103 tests pass, including menu recognition, one-hour healthy-menu preservation, replacements, closures, lobby transitions, retry limits, unready/error recovery and connection cleanup. Local enablement, release and final live recovery verification pending. Existing AC sleep setting is0; no startup/sleep settings changed.
+
 # Purge pacing, 12 November 2026
 
 Ben explicitly replaced repeat player/roster verification with dispatch from the

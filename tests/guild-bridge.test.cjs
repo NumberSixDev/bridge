@@ -16,6 +16,7 @@ Object.assign(process.env, {
     MINECRAFT_VERSION: '1.21.4',
     MINECRAFT_CHAT_COMMAND: '/gc',
     MINECRAFT_JOIN_COMMAND: '',
+    MINECRAFT_AFK_ENABLED: 'false',
     GUILD_AUTO_ACCEPT_ENABLED: 'false',
     REMINDER_ENABLED: 'false',
     DISCORD_IGNORE_PREFIX: ')',
@@ -91,6 +92,26 @@ test('join notices match only the exact server announcement and a valid username
         'Guild » Eletc has requested to join your guild! extra',
     ]) {
         assert.equal(GUILD_JOIN_REQUEST_PATTERN.test(text), false, text);
+    }
+});
+
+test('AFK keeper is installed after readiness and removed when that connection ends', async () => {
+    const runtimeEnv = require('../dist/src/util/env.js').default;
+    const previous = runtimeEnv.MINECRAFT_AFK_ENABLED;
+    runtimeEnv.MINECRAFT_AFK_ENABLED = true;
+    let h;
+    try {
+        h = await createJoinRequestHarness();
+        assert.equal(h.mineflayer.afk, undefined);
+        await h.spawn();
+        assert.ok(h.mineflayer.afk);
+        assert.equal(h.bot.listenerCount('windowClose'), 1);
+        h.bot.emit('end', 'test disconnect');
+        assert.equal(h.mineflayer.afk, undefined);
+        assert.equal(h.bot.listenerCount('windowClose'), 0);
+    } finally {
+        h?.mineflayer.stop();
+        runtimeEnv.MINECRAFT_AFK_ENABLED = previous;
     }
 });
 
