@@ -3,7 +3,9 @@
 Ben explicitly replaced repeat player/roster verification with dispatch from the
 reviewed and confirmed list, one kick per second. See PURGE_HANDOFF.md for the
 current policy and tests; its new section supersedes older fresh-preflight and
-per-kick verification descriptions. Release pending; no real purge was tested.
+per-kick verification descriptions. Source85b3970 is pushed and deployed;
+all95 tests and local checks passed, and the restarted runtime verified115
+members. No real purge was tested.
 
 # Stalled searches, 11 November 2026
 

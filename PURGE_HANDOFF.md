@@ -6,7 +6,7 @@
 -   Opening Purge freezes eligible, non-excluded rows from the displayed panel. Admin/Guild Master roles and staff channel are checked on the confirmation interaction. The same actor, nonce, expiry and single-job rules remain.
 -   First command is immediate; later commands are paced at1000ms from the preceding send. There is no final delay, no per-player REST role lookup and no roster/player lookup during confirmation or execution. Result wording counts commands sent rather than asserting confirmed removals.
 -   Permanent exclusions, bot/Guild Master protection, settings/exclusion changes, disconnect/shutdown and send failures still guard local dispatch. No new target can be added to the confirmed list. Missing/private/unusable values remain review-only at panel creation.
--   Build/all95 tests pass. Fault/guard cases and a60-target virtual timing test pass; the production timer measured1002ms and1001ms between mocked sends. No real kick was issued. Release pending.
+-   Source `85b3970` pushed as NumberSixDev and deployed via the existing Mac LaunchAgent. Build/all95 tests, formatting/lint, configuration and performance checks passed. Fault/guard cases and a60-target virtual timing test pass; the production timer measured1002ms and1001ms between mocked sends. The restarted runtime connected and verified115 guild members plus the guild-kick help entry. No real kick was issued; live server removal/cooldown behaviour is untested.
 
 ## Historical implementation and verification
 
