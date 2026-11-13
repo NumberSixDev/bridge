@@ -1,3 +1,8 @@
+# Embed attribution, 13 November 2026
+
+-   Source `1dcf945753c3bb8af6765767c1e80a6c8aa46b53` is pushed as NumberSixDev and deployed through the existing Mac LaunchAgent. Every production embed now uses `src/discord/embed.ts` with the footer `Created & maintained by @LabGeek`. Existing paging, search timing and purge confirmation footer text stays on the preceding line. This covers chat relay, application/settings cards, leaderboards/player reports, eligibility, purge and other command/error embeds. Credit is display text, with no notification or extra API lookup.
+-   Build/all113 tests, formatting/lint and configuration passed. Live runtime generated the credited leaderboard and settings payloads; Discord API readback confirmed the footer on a newly relayed guild message. Minecraft verified123 members and AFK resumed after restart. No test message or membership action was sent; old historical messages are not bulk-edited. Temporary diagnostics closed.
+
 # Custom guild rank roster repair, 13 November 2026
 
 -   Cause verified against the existing live Minecraft connection: `/g list` now includes `RICH [1]` between Staff and Member. The fixed five-rank parser ignored that heading, then counted its player against the already complete Staff group and rejected every refresh.
