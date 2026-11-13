@@ -169,8 +169,10 @@ search-time footer. The target is checked against the verified current roster
 before any player API work and again when a page button is used.
 
 `/gleaderboard` ranks only the members returned by the bot's own `/g list`.
-The roster must contain complete, count-matched Guild Master, Admin, Staff,
-Bridge and Member groups before it can be used. A complete roster is cached for
+The roster starts at Guild Master and reads all counted ranks, including custom
+ranks such as RICH. Every rank count and the overall member total in the server's
+guild summary must match before it can be used. Legacy responses without that
+summary require all five original rank groups to be complete. A complete roster is cached for
 up to ten minutes, refreshes in the background every ten minutes while connected, and is cleared on disconnect; an incomplete or failed refresh
 is never used as a stale fallback.
 

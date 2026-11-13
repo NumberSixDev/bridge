@@ -4,7 +4,7 @@ import winston from 'winston';
 import { GuildRoster } from './types';
 
 export const GUILD_LIST_GROUPS = ['Guild Master', 'Admin', 'Staff', 'Bridge', 'Member'] as const;
-export type GuildListGroup = (typeof GUILD_LIST_GROUPS)[number];
+export type GuildListGroup = string;
 
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
 const MAX_MEMBERS = 500;
@@ -38,6 +38,7 @@ interface PendingRoster {
     groups: Map<GuildListGroup, GroupState>;
     members: Map<string, string>;
     currentGroup?: GuildListGroup;
+    expectedTotal?: number;
     resolve: (roster: GuildRoster) => void;
     reject: (error: Error) => void;
     timer: ReturnType<typeof setTimeout>;
@@ -50,14 +51,13 @@ export function stripMinecraftFormatting(value: string) {
 
 export function parseGuildListHeader(value: string): GuildListHeader | undefined {
     const clean = stripMinecraftFormatting(value).trim();
-    const match = clean.match(
-        /^(Guild Master|Admin|Staff|Bridge|Member) \[(\d+)\](?:[ \t]*(.*))?$/
-    );
-    if (!match) return undefined;
+    const match = clean.match(/^([^:[\]\r\n>»]{1,64}) \[(\d+)\](?:[ \t]*(.*))?$/u);
+    const group = match?.[1]?.trim();
+    if (!match || !group) return undefined;
     const expected = Number(match[2]);
     if (!Number.isSafeInteger(expected) || expected < 0 || expected > MAX_MEMBERS) return undefined;
     return {
-        group: match[1] as GuildListGroup,
+        group,
         expected,
         rest: match[3]?.trim() ?? '',
     };
@@ -164,6 +164,18 @@ export class GuildRosterCollector {
         if (!pending || typeof message !== 'string') return;
 
         for (const line of stripMinecraftFormatting(message).split(/\r?\n/u)) {
+            // The server's total lets custom ranks appear anywhere without completing
+            // early at Member or accidentally counting their players in the prior rank.
+            const summary = line.trim().match(/^Guild Name: .+ \((\d+)\/(\d+) online\)$/u);
+            if (summary && pending.groups.size === 0) {
+                const total = Number(summary[2]);
+                if (!Number.isSafeInteger(total) || total < 1 || total > MAX_MEMBERS) {
+                    this.failPending('The Minecraft guild list declared an invalid member total.');
+                    return;
+                }
+                pending.expectedTotal = total;
+                continue;
+            }
             const header = parseGuildListHeader(line);
             if (header) {
                 // A requested response must begin at the exact Guild Master header. This
@@ -179,6 +191,14 @@ export class GuildRosterCollector {
                     expected: header.expected,
                     members: [],
                 });
+                const declaredTotal = [...pending.groups.values()].reduce(
+                    (sum, group) => sum + group.expected,
+                    0
+                );
+                if (declaredTotal > (pending.expectedTotal ?? MAX_MEMBERS)) {
+                    this.failPending('The Minecraft rank counts exceeded the guild member total.');
+                    return;
+                }
                 pending.currentGroup = header.group;
                 if (header.rest) this.consumeNames(header.rest, pending);
                 if (!this.pending) return;
@@ -231,19 +251,16 @@ export class GuildRosterCollector {
 
     private isComplete(pending: PendingRoster) {
         return (
-            pending.groups.size === GUILD_LIST_GROUPS.length &&
-            GUILD_LIST_GROUPS.every((groupName) => {
-                const group = pending.groups.get(groupName);
-                return group !== undefined && group.members.length === group.expected;
-            })
+            (pending.expectedTotal !== undefined
+                ? pending.members.size === pending.expectedTotal
+                : GUILD_LIST_GROUPS.every((groupName) => pending.groups.has(groupName))) &&
+            [...pending.groups.values()].every((group) => group.members.length === group.expected)
         );
     }
 
     private completePending(pending: PendingRoster) {
         if (this.pending !== pending) return;
-        const members = GUILD_LIST_GROUPS.flatMap(
-            (groupName) => pending.groups.get(groupName)?.members ?? []
-        );
+        const members = [...pending.groups.values()].flatMap((group) => group.members);
         if (members.length > MAX_MEMBERS) {
             this.failPending('The Minecraft guild list exceeded the safe member limit.');
             return;
@@ -254,7 +271,7 @@ export class GuildRosterCollector {
         const roster = { members, guildMaster, observedAt: this.now() };
         this.cache = roster;
         winston.info(
-            `Guild leaderboard roster verified: ${members.length} members across five ranks.`
+            `Guild leaderboard roster verified: ${members.length} members across ${pending.groups.size} ranks.`
         );
         pending.resolve(cloneRoster(roster));
     }

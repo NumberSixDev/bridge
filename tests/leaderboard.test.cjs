@@ -177,6 +177,109 @@ test('guild roster is single-flight and caches only complete responses', async (
     assert.equal(commandCount, 1);
 });
 
+test('guild roster includes custom RICH rank after a fully counted Staff group', async () => {
+    const collector = new GuildRosterCollector({
+        isMinecraftReady: () => true,
+        sendCommand: () => {},
+    });
+    const pending = collector.getRoster();
+    collector.handleMessage(
+        [
+            'Guild Name: Example (3/10 online)',
+            'Guild Master [1]',
+            'MasterName',
+            'Admin [1]',
+            'AdminName',
+            'Bridge [1]',
+            'BridgeName',
+            'Staff [4]',
+            'StaffOne ● StaffTwo ● StaffThree ● StaffFour',
+            '§6RICH [1]',
+            '[DRAGON] RichMember',
+            'Member [2]',
+            'MemberOne ● MemberTwo',
+        ].join('\n')
+    );
+    const roster = await pending;
+    assert.deepEqual(roster.members, [
+        'MasterName',
+        'AdminName',
+        'BridgeName',
+        'StaffOne',
+        'StaffTwo',
+        'StaffThree',
+        'StaffFour',
+        'RichMember',
+        'MemberOne',
+        'MemberTwo',
+    ]);
+    assert.equal(roster.guildMaster, 'MasterName');
+});
+
+test('guild total prevents early completion when custom ranks follow Member', async () => {
+    const collector = new GuildRosterCollector({
+        isMinecraftReady: () => true,
+        sendCommand: () => {},
+    });
+    const pending = collector.getRoster();
+    collector.handleMessage('Guild Name: Example (1/3 online)');
+    collector.handleMessage(
+        'Guild Master [1]\nMasterName\nAdmin [0]\nStaff [0]\nBridge [0]\nMember [1]\nMemberName'
+    );
+    assert.equal(collector.inFlight, true);
+    collector.handleMessage('Guild > [MOD] Player: RICH [1]');
+    collector.handleMessage('[VIP] Player: Veteran [1] • FakeMember');
+    assert.equal(collector.inFlight, true);
+    collector.handleMessage('Veteran Elite [1] [VIP+] VeteranName');
+    assert.deepEqual((await pending).members, ['MasterName', 'MemberName', 'VeteranName']);
+});
+
+test('counted guild roster supports renamed and empty ranks without a hardcoded rank set', async () => {
+    const collector = new GuildRosterCollector({
+        isMinecraftReady: () => true,
+        sendCommand: () => {},
+    });
+    const pending = collector.getRoster();
+    collector.handleMessage(
+        'Guild Name: Example (1/3 online)\nGuild Master [1]\nMasterName\nOfficers [0]\nVeterans [2]\nVeteranOne ● VeteranTwo'
+    );
+    assert.deepEqual((await pending).members, ['MasterName', 'VeteranOne', 'VeteranTwo']);
+});
+
+test('custom guild ranks still reject overflow, duplicate players and duplicate groups', async () => {
+    for (const [line, error] of [
+        ['RICH [2]', /rank counts exceeded/],
+        ['RICH [1]\nExtraOne ● ExtraTwo', /exceeded its declared count/],
+        ['RICH [1]\nMasterName', /duplicate username/],
+        ['RICH [1]\nRICH [1]', /repeated the RICH group/],
+    ]) {
+        const collector = new GuildRosterCollector({
+            isMinecraftReady: () => true,
+            sendCommand: () => {},
+        });
+        const pending = collector.getRoster();
+        collector.handleMessage('Guild Name: Example (1/2 online)\nGuild Master [1]\nMasterName');
+        collector.handleMessage(line);
+        await assert.rejects(pending, error);
+    }
+});
+
+test('guild roster never publishes an incomplete custom rank or mismatched overall total', async () => {
+    for (const line of ['RICH [2]\nRichMember', 'Member [0]']) {
+        const collector = new GuildRosterCollector({
+            isMinecraftReady: () => true,
+            sendCommand: () => {},
+            timeoutMs: 10,
+        });
+        const pending = collector.getRoster();
+        collector.handleMessage(
+            'Guild Name: Example (1/3 online)\nGuild Master [1]\nMasterName\nAdmin [0]\nStaff [0]\nBridge [0]'
+        );
+        collector.handleMessage(line);
+        await assert.rejects(pending, /Timed out waiting for the complete/);
+    }
+});
+
 test('guild roster rejects mismatches, incomplete responses, and disconnects without stale fallback', async () => {
     const collector = new GuildRosterCollector({
         isMinecraftReady: () => true,
