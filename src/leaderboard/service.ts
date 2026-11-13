@@ -1,3 +1,4 @@
+import BridgeEmbed from '@discord/embed';
 /* eslint-disable no-nested-ternary, no-restricted-syntax, class-methods-use-this, no-constant-condition */
 
 import {
@@ -7,7 +8,6 @@ import {
     ButtonInteraction,
     ButtonStyle,
     ChatInputCommandInteraction,
-    EmbedBuilder,
     InteractionEditReplyOptions,
 } from 'discord.js';
 import { randomUUID } from 'crypto';
@@ -1157,7 +1157,7 @@ export default class LeaderboardService {
         ]
             .filter((line): line is string => line !== undefined)
             .join('\n');
-        const embed = new EmbedBuilder()
+        const embed = new BridgeEmbed()
             .setColor('Purple')
             .setTitle(`Guild leaderboard · ${snapshot.metric.label}`)
             .setDescription(description)
@@ -1212,7 +1212,7 @@ export default class LeaderboardService {
                 })
                 .join('\n'),
         ].join('\n');
-        const embed = new EmbedBuilder()
+        const embed = new BridgeEmbed()
             .setColor('Purple')
             .setTitle('Guild leaderboard · player report')
             .setDescription(description)

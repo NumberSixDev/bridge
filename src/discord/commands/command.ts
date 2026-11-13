@@ -1,4 +1,5 @@
-import { ApplicationCommandOptionType, EmbedBuilder } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
+import { ApplicationCommandOptionType } from 'discord.js';
 
 export default {
     data: {
@@ -16,7 +17,7 @@ export default {
     run: async (bridge, interaction, args) => {
         const input = args[0] as string;
         const command = input.startsWith('/') ? input : `/${input}`;
-        const embed = new EmbedBuilder();
+        const embed = new BridgeEmbed();
         try {
             bridge.mineflayer.execute(command);
             embed

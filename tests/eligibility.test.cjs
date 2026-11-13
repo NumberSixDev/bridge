@@ -56,7 +56,10 @@ test('eligibility requires both minimums, treats equality as passing and ignores
         assert.match(embed.description, /Profile: \*\*Wise\*\* \(main\)/);
         assert.doesNotMatch(embed.description, /§7/);
         assert.match(embed.description, /Profile saved: <t:1000000000:R>/);
-        assert.equal(embed.footer.text, 'Time Taken to Search: 1.25s');
+        assert.equal(
+            embed.footer.text,
+            'Time Taken to Search: 1.25s\nCreated & maintained by @LabGeek'
+        );
     }
 });
 

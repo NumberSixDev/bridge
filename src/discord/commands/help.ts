@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
 
 export default {
     data: {
@@ -6,7 +6,7 @@ export default {
         description: 'View a list of all commands!',
     },
     run: async (bridge, interaction) => {
-        const embed = new EmbedBuilder().setColor('Purple').setTitle('Commands');
+        const embed = new BridgeEmbed().setColor('Purple').setTitle('Commands');
 
         bridge.discord.commands.forEach((command) => {
             embed.addFields({

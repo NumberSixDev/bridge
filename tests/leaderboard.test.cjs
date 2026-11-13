@@ -573,7 +573,7 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     assert.match(buttonCalls[1][1].embeds[0].data.description, /Member1/);
     assert.match(buttonCalls[1][1].embeds[0].data.footer.text, /Page 2\/2/);
     assert.ok(
-        buttonCalls[1][1].embeds[0].data.footer.text.endsWith(searchTime[0]),
+        buttonCalls[1][1].embeds[0].data.footer.text.split('\n')[0].endsWith(searchTime[0]),
         'paging preserves the original search duration'
     );
 

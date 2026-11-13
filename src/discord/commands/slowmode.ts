@@ -1,4 +1,5 @@
-import { ApplicationCommandOptionType, EmbedBuilder } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
+import { ApplicationCommandOptionType } from 'discord.js';
 
 const choices = [0, 5, 10];
 
@@ -21,7 +22,7 @@ export default {
 
         await bridge.discord.memberChannel?.setRateLimitPerUser(time);
 
-        const embed = new EmbedBuilder()
+        const embed = new BridgeEmbed()
             .setColor('Green')
             .setTitle('Slowmode set!')
             .setDescription(`Slowmode has been set to ${time}s`);

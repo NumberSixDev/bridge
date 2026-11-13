@@ -1,3 +1,4 @@
+import BridgeEmbed from '@discord/embed';
 import { randomUUID } from 'crypto';
 import {
     ActionRowBuilder,
@@ -5,7 +6,6 @@ import {
     ButtonInteraction,
     ButtonStyle,
     ChatInputCommandInteraction,
-    EmbedBuilder,
     escapeMarkdown,
     Message,
     ModalBuilder,
@@ -725,7 +725,7 @@ export default class RecruitmentService {
         ].join('\n');
         return {
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor('Purple')
                     .setTitle('Guild recruitment settings')
                     .setDescription(description),
@@ -791,7 +791,7 @@ export default class RecruitmentService {
         else if (application.status === 'acceptance-sent') color = 'Green';
         return {
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor(color)
                     .setTitle(`Guild application: ${application.username}`)
                     .setDescription(values.join('\n'))
@@ -873,7 +873,7 @@ export default class RecruitmentService {
                 const oldMessage = await oldChannel?.messages.fetch(existingId);
                 await oldMessage?.edit({
                     embeds: [
-                        new EmbedBuilder()
+                        new BridgeEmbed()
                             .setColor('Grey')
                             .setTitle('Recruitment panel moved')
                             .setDescription(

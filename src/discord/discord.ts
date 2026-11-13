@@ -1,4 +1,5 @@
-import { Client, Collection, EmbedBuilder, TextChannel } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
+import { Client, Collection, TextChannel } from 'discord.js';
 import recursiveWalkDir from '@util/recursive-walk-dir';
 import path from 'path';
 import loadEvents from '@util/load-events';
@@ -11,7 +12,7 @@ export default class Discord extends Client {
 
     public async send(content: string) {
         if (!this.memberChannel) throw new Error('The Discord bridge channel is not ready.');
-        const embed = new EmbedBuilder().setDescription(content).setColor(0x8e44ad);
+        const embed = new BridgeEmbed().setDescription(content).setColor(0x8e44ad);
         await this.memberChannel.send({ embeds: [embed], allowedMentions: { parse: [] } });
     }
 

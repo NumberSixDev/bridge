@@ -1,4 +1,5 @@
-import { EmbedBuilder, escapeMarkdown } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
+import { escapeMarkdown } from 'discord.js';
 import { formatAmount } from './amount';
 import { evaluateEligibility } from './policy';
 import { cleanProfileName } from './presentation';
@@ -48,7 +49,7 @@ export default function eligibilityEmbed(
     if (evidence.profileSavedAt !== undefined && Number.isFinite(evidence.profileSavedAt)) {
         lines.push(`Profile saved: <t:${Math.floor(evidence.profileSavedAt / 1000)}:R>`);
     }
-    return new EmbedBuilder()
+    return new BridgeEmbed()
         .setTitle(`Guild eligibility: ${evidence.username}`)
         .setColor(color)
         .setDescription(lines.join('\n'))

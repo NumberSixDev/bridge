@@ -1,3 +1,4 @@
+import BridgeEmbed from '@discord/embed';
 /* eslint-disable class-methods-use-this, no-constant-condition */
 /* eslint-disable no-await-in-loop, no-restricted-syntax, no-nested-ternary */
 
@@ -8,7 +9,6 @@ import {
     ButtonInteraction,
     ButtonStyle,
     ChatInputCommandInteraction,
-    EmbedBuilder,
     escapeMarkdown,
     InteractionEditReplyOptions,
     StringSelectMenuBuilder,
@@ -1172,7 +1172,7 @@ export default class PurgeService {
         );
         return {
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor('Red')
                     .setTitle('Guild purge review')
                     .setDescription(limitedDescription)
@@ -1208,7 +1208,7 @@ export default class PurgeService {
         ].join('\n');
         return {
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor('Red')
                     .setTitle('Confirm guild purge')
                     .setDescription(
@@ -1253,7 +1253,7 @@ export default class PurgeService {
     private disabledPayload(reason: string): InteractionEditReplyOptions {
         return {
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor('Red')
                     .setTitle('Guild purge unavailable')
                     .setDescription(`${reason}\n\nNo Minecraft command was sent.`),

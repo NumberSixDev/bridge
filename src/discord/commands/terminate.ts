@@ -1,4 +1,4 @@
-import { EmbedBuilder } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
 import winston from 'winston';
 
 export default {
@@ -6,7 +6,7 @@ export default {
     run: async (bridge, interaction) => {
         await interaction.reply({
             embeds: [
-                new EmbedBuilder()
+                new BridgeEmbed()
                     .setColor('Green')
                     .setTitle('Stopped')
                     .setDescription('The bridge session has stopped.'),

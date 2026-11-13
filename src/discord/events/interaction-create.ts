@@ -1,4 +1,5 @@
-import { ApplicationCommandOptionType, EmbedBuilder, Interaction } from 'discord.js';
+import BridgeEmbed from '@discord/embed';
+import { ApplicationCommandOptionType, Interaction } from 'discord.js';
 import winston from 'winston';
 import env from '@util/env';
 import isStaffCommandChannel from '@util/staff-command-channel';
@@ -77,7 +78,7 @@ export default {
                 if (!(await bridge.recruitment.authoriseInteraction(interaction))) {
                     const denial = {
                         embeds: [
-                            new EmbedBuilder()
+                            new BridgeEmbed()
                                 .setColor('Red')
                                 .setDescription(
                                     'You do not have permission to use recruitment controls.'
@@ -122,7 +123,7 @@ export default {
             ) {
                 await interaction.reply({
                     embeds: [
-                        new EmbedBuilder()
+                        new BridgeEmbed()
                             .setColor('Red')
                             .setDescription(
                                 'You do not have permission to use recruitment controls.'
@@ -147,7 +148,7 @@ export default {
         ) {
             await interaction.reply({
                 embeds: [
-                    new EmbedBuilder()
+                    new BridgeEmbed()
                         .setColor('Red')
                         .setDescription('You do not have permission to run that command.'),
                 ],
