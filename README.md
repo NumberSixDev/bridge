@@ -179,12 +179,13 @@ is never used as a stale fallback.
 Available categories are `networth`, `purse`, `collections`, `skills`,
 `bestiary`, `slayer`, `dungeons`, `mining`, `currencies`, `stats` and `rng`.
 Categories with multiple safe metrics provide autocomplete. Rankings use the
-official HTTPS player and networth endpoints, fetch at most two players at a
-time, omit failed or unavailable values rather than treating them as zero, and
-show partial networth estimates with an approximate marker. Inventory contents
-and other private item data are never displayed. Results are stable for the
-ten-minute button session, which is bound to its original guild, channel and
-message; buttons also re-check current membership before changing page.
+official HTTPS player and networth endpoints for selected Normal and Ironman
+profiles in main mode. The bridge fetches at most two players at a time, omits
+failed or unavailable values, and shows partial networth estimates with an
+approximate marker. Inventory contents and other private item data are never
+displayed. Results are stable for the ten-minute button session, which is bound
+to its original guild, channel and message. Buttons re-check current membership
+before changing page.
 
 Completed numeric stats refresh in the background every five minutes while
 Minecraft is ready. A usable result can render immediately with its `Stats
@@ -196,9 +197,10 @@ credentials.
 
 If fresh stats are unavailable, leaderboard searches stop waiting after fifteen
 seconds and purge previews after twenty seconds, with a retry message. Individual
-API reads and complete refreshes also have hard deadlines; a stalled refresh
-releases its shared slot so the next refresh can recover. Late results cannot
-replace a newer dataset. Existing data-age limits and purge checks still apply.
+API reads have their own deadlines. A full stats refresh has up to four minutes
+for both profiles and networth. If it times out, the last usable dataset stays
+in place and the next refresh can retry. Existing data-age limits and purge
+checks still apply.
 
 ## AFK rewards
 

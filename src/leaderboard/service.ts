@@ -195,7 +195,7 @@ export default class LeaderboardService {
         this.cooldownMs = options.cooldownMs ?? COMMAND_COOLDOWN_MS;
         this.dataDir = options.dataDir;
         this.lookupTimeoutMs = options.lookupTimeoutMs ?? 20_000;
-        this.refreshTimeoutMs = options.refreshTimeoutMs ?? 150_000;
+        this.refreshTimeoutMs = options.refreshTimeoutMs ?? 240_000;
         this.responseTimeoutMs = options.responseTimeoutMs ?? 15_000;
         this.dataset = this.loadDataset();
         this.roster = new GuildRosterCollector({
@@ -767,16 +767,14 @@ export default class LeaderboardService {
     ): Promise<LeaderboardDataset> {
         if (!roster.members.length)
             throw new Error('The current Minecraft guild roster is empty; nothing can be ranked.');
-        const deadline = this.now() + 120_000;
         const profileResults = await parallelMap(roster.members, 2, async (username) => {
+            if (
+                this.stopped ||
+                lifecycle !== this.lifecycleGeneration ||
+                refresh !== this.refreshGeneration
+            )
+                throw new Error('Minecraft connection changed during the stats refresh.');
             try {
-                if (
-                    this.stopped ||
-                    lifecycle !== this.lifecycleGeneration ||
-                    refresh !== this.refreshGeneration ||
-                    this.now() >= deadline
-                )
-                    throw new Error('Lookup deadline reached.');
                 return { username, profile: await this.getProfile(username) };
             } catch (error) {
                 return { username, error };
@@ -800,14 +798,13 @@ export default class LeaderboardService {
         const networths = new Map<string, NetworthSnapshot>();
         if (includeNetworth) {
             const networthResults = await parallelMap(profiles, 2, async (profile) => {
+                if (
+                    this.stopped ||
+                    lifecycle !== this.lifecycleGeneration ||
+                    refresh !== this.refreshGeneration
+                )
+                    throw new Error('Minecraft connection changed during the stats refresh.');
                 try {
-                    if (
-                        this.stopped ||
-                        lifecycle !== this.lifecycleGeneration ||
-                        refresh !== this.refreshGeneration ||
-                        this.now() >= deadline
-                    )
-                        throw new Error('Lookup deadline reached.');
                     return {
                         profile,
                         networth: await this.getNetworth(profile.username, profile.profileId),

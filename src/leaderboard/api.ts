@@ -132,7 +132,7 @@ export class DragSimLeaderboardClient implements LeaderboardLookupClient {
             profileId.length > 100 ||
             !selectedEntry ||
             selectedEntry.selected !== true ||
-            selected?.profile_mode !== 'NORMAL'
+            (selected?.profile_mode !== 'NORMAL' && selected?.profile_mode !== 'IRONMAN')
         ) {
             throw new Error('The profile API did not return a matching selected main profile.');
         }

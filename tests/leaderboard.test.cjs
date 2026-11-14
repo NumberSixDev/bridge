@@ -90,6 +90,84 @@ test('stalled dataset refresh returns a response, resets, and cannot overwrite a
     }
 });
 
+test('full networth refresh covers all 125 members when the lookup cycle exceeds two minutes', async () => {
+    const members = Array.from({ length: 125 }, (_, index) => `Member${index + 1}`);
+    const startedAt = 1_000;
+    let now = startedAt;
+    const profileCalls = [];
+    const networthCalls = [];
+    const service = new LeaderboardService({
+        sendMinecraftCommand: () => {},
+        isMinecraftReady: () => true,
+        now: () => now,
+        lookup: {
+            async getProfile(username) {
+                now += 640;
+                profileCalls.push(username);
+                return richProfile(username);
+            },
+            async getNetworth(username, profileId) {
+                now += 640;
+                networthCalls.push(username);
+                return { username, profileId, total: 42, hidden: false, partial: true };
+            },
+        },
+    });
+    try {
+        const dataset = await service.startDatasetRefresh({ members, observedAt: startedAt }, true);
+        assert.deepEqual(profileCalls, members);
+        assert.deepEqual(networthCalls, members);
+        assert.equal(dataset.completedAt - startedAt, 160_000);
+        assert.equal(dataset.records.length, members.length);
+        assert.equal(dataset.records.at(-1).username, members.at(-1));
+        assert.equal(dataset.records.at(-1).values.networth, 42);
+        assert.equal(dataset.records.at(-1).approximate.networth, true);
+    } finally {
+        service.stop();
+    }
+});
+
+test('a timed-out refresh preserves the usable dataset and skips queued networth lookups', async () => {
+    const now = 1_000;
+    const roster = { members: ['One', 'Two', 'Three'], observedAt: now };
+    const networthCalls = [];
+    const persisted = [];
+    let release;
+    const blocked = new Promise((resolve) => {
+        release = resolve;
+    });
+    const service = new LeaderboardService({
+        sendMinecraftCommand: () => {},
+        isMinecraftReady: () => true,
+        now: () => now,
+        refreshTimeoutMs: 20,
+        lookup: {
+            getProfile: async (username) => richProfile(username),
+            async getNetworth(username, profileId) {
+                networthCalls.push(username);
+                await blocked;
+                return { username, profileId, total: 42, hidden: false, partial: true };
+            },
+        },
+    });
+    const prior = { completedAt: now - 1, includesNetworth: true, records: [] };
+    service.dataset = prior;
+    service.persistDataset = async (dataset) => persisted.push(dataset);
+    try {
+        await assert.rejects(service.startDatasetRefresh(roster, true), /refresh timed out/);
+        assert.equal(await service.ensureDataset(roster, true), prior);
+        release();
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(networthCalls, ['One', 'Two']);
+        assert.equal(service.networthCache.size, 0);
+        assert.equal(service.dataset, prior);
+        assert.deepEqual(persisted, []);
+    } finally {
+        release();
+        service.stop();
+    }
+});
+
 test('profile and networth timeouts clear in-progress caches and permit a fresh retry', async () => {
     let blocked = true;
     const service = new LeaderboardService({
@@ -366,9 +444,10 @@ function response(body, status = 200, headers = {}) {
     });
 }
 
-test('leaderboard API validates profile identity, selected NORMAL profile, networth identity and one bounded 429 retry', async () => {
+test('leaderboard API validates selected NORMAL and IRONMAN profiles, identities and one bounded 429 retry', async () => {
     const calls = [];
     let retry = true;
+    let profileMode = 'NORMAL';
     const client = new DragSimLeaderboardClient({
         baseUrl: 'https://dragsim.co/api/',
         sleep: async () => {},
@@ -387,7 +466,7 @@ test('leaderboard API validates profile identity, selected NORMAL profile, netwo
                     profile: {
                         id: 'profile',
                         profile_name: 'Main',
-                        profile_mode: 'NORMAL',
+                        profile_mode: profileMode,
                         inventory_hidden: true,
                         coins: 50,
                     },
@@ -412,6 +491,16 @@ test('leaderboard API validates profile identity, selected NORMAL profile, netwo
     assert.equal(networth.partial, true);
     assert.equal(calls.length, 3);
     await assert.rejects(client.getProfile('Other'), /different player/);
+
+    profileMode = 'IRONMAN';
+    const ironman = await client.getProfile('Player');
+    assert.equal(ironman.profileId, 'profile');
+    assert.equal(ironman.inventoryHidden, true);
+
+    for (const unsupportedMode of ['UNKNOWN', undefined]) {
+        profileMode = unsupportedMode;
+        await assert.rejects(client.getProfile('Player'), /matching selected main profile/);
+    }
 });
 
 function rosterMessages(names) {
