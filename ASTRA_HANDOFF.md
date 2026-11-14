@@ -5,7 +5,7 @@
 -   Removed that silent cutoff. A complete refresh now has a four-minute hard deadline, with unchanged two-request concurrency, individual lookup deadlines and short Discord-response waits. Timeout/disconnect invalidates queued work and cannot publish late or truncated results; still-valid prior data remains available. Genuine failed/private values remain unavailable. No purge dispatch/confirmation, exclusion or recruitment-policy changes.
 -   Two other valid main-mode selected profiles were IRONMAN, rejected by the leaderboard's NORMAL-only gate. The explicit allowlist now includes NORMAL and IRONMAN, retaining identity, selected-profile and privacy checks; unknown modes still fail. Official API checks confirmed public profile/networth availability for both.
 -   Astra owned diagnosis/review; native gpt-6.1-sol implemented the bounded patch. Build/all115 tests, formatting/lint, configuration and offline lookup benchmark passed. Regressions cover125 members over a simulated160-second cycle, hard-timeout cache/publication protection, and Ironman mode validation. The benchmark retained peak concurrency2 and three API lookups for four searches (62.73ms median with30ms simulated latency; not live leaderboard speed).
--   Fix is prepared for scoped GitHub push while the bot stays offline. Full deployed cold-refresh and Discord purge/leaderboard verification remain pending Ben's request to reconnect. No kicks or test messages were sent.
+-   Source `3c73f62` is committed and pushed to NumberSixDev/bridge on `feat/dragsim-guild-chat`; the bot stays offline. Full deployed cold-refresh and Discord purge/leaderboard verification remain pending Ben's request to reconnect. No kicks or test messages were sent.
 
 # Embed attribution, 13 November 2026
 
