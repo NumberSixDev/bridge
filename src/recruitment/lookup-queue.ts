@@ -14,10 +14,11 @@ export default class LookupQueue {
 
     constructor(private readonly run: (username: string) => Promise<LookupEvidence>) {}
 
-    public lookup(username: string): Promise<LookupEvidence> {
+    public lookup(username: string, requestId?: string): Promise<LookupEvidence> {
         if (!/^[A-Za-z0-9_]{1,16}$/.test(username))
             return Promise.reject(new Error('The lookup username is not valid.'));
-        const key = username.toLowerCase();
+        // A new request after expiry must not join the prior application's in-flight lookup.
+        const key = requestId ? `${username.toLowerCase()}:${requestId}` : username.toLowerCase();
         let request = this.inflight.get(key);
         if (!request) {
             request = new Promise<LookupEvidence>((resolve, reject) => {

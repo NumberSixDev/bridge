@@ -36,6 +36,7 @@ import {
 const USERNAME_PATTERN = /^[A-Za-z0-9_]{1,16}$/;
 const CLOSED_SUPPRESSION_MS = 60_000;
 const JOIN_REQUEST_LIFETIME_MS = 5 * 60_000;
+const EXPIRED_APPLICATION = 'That application has expired. The player can send a new join request.';
 const RETENTION_MS = 30 * 24 * 60 * 60_000;
 const MAX_APPLICATIONS = 1_000;
 const PANEL_EDIT_ID = 'recruitment:panel:edit';
@@ -72,7 +73,25 @@ function isClosed(application: ApplicationRecord) {
     return application.status !== 'pending';
 }
 
-function statusLabel(application: ApplicationRecord) {
+function expiresAt(application: ApplicationRecord) {
+    return application.receivedAt + JOIN_REQUEST_LIFETIME_MS;
+}
+
+function isExpired(application: ApplicationRecord, now: number) {
+    return (
+        application.status === 'expired' ||
+        (application.status === 'pending' && now >= expiresAt(application))
+    );
+}
+
+function markExpired(application: ApplicationRecord) {
+    application.status = 'expired';
+    application.autoCandidate = false;
+    application.deliveryIssue = undefined;
+}
+
+function statusLabel(application: ApplicationRecord, now: number) {
+    if (isExpired(application, now)) return 'Expired';
     switch (application.status) {
         case 'acceptance-sent':
             return 'Acceptance sent';
@@ -105,6 +124,8 @@ export default class RecruitmentService {
     private readonly lookupQueue: LookupQueue;
     private readonly deliveryAttempts = new Map<string, number>();
     private readonly deliveryTimers = new Map<string, NodeJS.Timeout>();
+    private readonly expiredOnRecovery = new Set<string>();
+    private expiryTimer?: NodeJS.Timeout;
 
     constructor(options: RecruitmentServiceOptions) {
         this.store =
@@ -182,23 +203,31 @@ export default class RecruitmentService {
             return;
         }
         const receivedAt = this.now();
-        const id = await this.exclusive(async () => {
+        const expired = await this.expireDueApplications();
+        this.updateExpiredCards(expired);
+        const request = await this.exclusive(async () => {
             this.requireAvailable();
-            this.pruneApplications();
             const key = applicationKey(username);
-            const existing = this.state.applications.find(
-                (application) => application.usernameKey === key && !isClosed(application)
+            const previous = this.state.applications.filter(
+                (application) => application.usernameKey === key
             );
-            if (existing) return undefined;
-            const recentlyClosed = this.state.applications.find(
+            const activeOrExpired = previous.filter(
                 (application) =>
-                    application.usernameKey === key &&
+                    application.status === 'pending' || application.status === 'expired'
+            );
+            // Compare receipt times so a duplicate delayed by the mutation lock stays a duplicate.
+            if (activeOrExpired.some((application) => receivedAt < expiresAt(application)))
+                return undefined;
+            const recentlyClosed = previous.some(
+                (application) =>
                     isClosed(application) &&
-                    this.now() - (application.decision?.decidedAt ?? application.receivedAt) <
+                    application.status !== 'expired' &&
+                    receivedAt - (application.decision?.decidedAt ?? application.receivedAt) <
                         CLOSED_SUPPRESSION_MS
             );
             if (recentlyClosed) return undefined;
 
+            this.pruneApplications();
             const { settings } = this.state;
             const application: ApplicationRecord = {
                 id: randomUUID(),
@@ -220,15 +249,19 @@ export default class RecruitmentService {
                 );
             this.state.applications.push(application);
             await this.persist();
-            return application.id;
+            this.scheduleExpiry();
+            return { id: application.id, freshLookup: activeOrExpired.length > 0 };
         });
-        if (!id) return;
-        await this.processApplication(id);
+        if (!request) return;
+        await this.processApplication(request.id, request.freshLookup);
     }
 
     public async onDiscordReady() {
         await this.mutationTail;
         if (!this.available || this.stopped) return;
+        const expiredIds = new Set(await this.expireDueApplications());
+        this.expiredOnRecovery.forEach((id) => expiredIds.add(id));
+        this.expiredOnRecovery.clear();
         await this.syncPanel(false).catch((error: unknown) => {
             winston.warn('Recruitment settings panel could not be synchronised:', error);
         });
@@ -236,6 +269,7 @@ export default class RecruitmentService {
             (application) =>
                 application.status === 'pending' ||
                 application.status === 'needs-verification' ||
+                (expiredIds.has(application.id) && application.messageId) ||
                 application.deliveryIssue
         );
         // Recovery is deliberately sequential to avoid flooding either service.
@@ -256,6 +290,7 @@ export default class RecruitmentService {
 
     public stop() {
         this.stopped = true;
+        clearTimeout(this.expiryTimer);
         this.deliveryTimers.forEach((timer) => clearTimeout(timer));
         this.deliveryTimers.clear();
     }
@@ -417,12 +452,26 @@ export default class RecruitmentService {
         await this.syncPanel(false);
     }
 
-    private async processApplication(id: string) {
+    private async processApplication(id: string, freshLookup = false) {
         if (this.stopped || !this.available) return;
         await this.deliverApplicationCard(id);
+        const active = await this.exclusive(() => this.activeApplicationLocked(id));
+        if (!active) {
+            await this.deliverApplicationCard(id);
+            return;
+        }
         let evidence;
         try {
-            evidence = await this.lookupQueue.lookup(this.application(id)?.username ?? '');
+            const replacesExpired =
+                freshLookup ||
+                this.state.applications.some(
+                    (previous) =>
+                        previous.usernameKey === active.usernameKey && previous.status === 'expired'
+                );
+            evidence = await this.lookupQueue.lookup(
+                active.username,
+                replacesExpired ? id : undefined
+            );
             const currentUsername = this.application(id)?.username;
             if (
                 !currentUsername ||
@@ -432,8 +481,8 @@ export default class RecruitmentService {
             }
         } catch (error) {
             await this.exclusive(async () => {
-                const application = this.application(id);
-                if (!application || application.status !== 'pending') return;
+                const application = await this.activeApplicationLocked(id);
+                if (!application) return;
                 application.lookupStatus = 'error';
                 application.autoCandidate = false;
                 application.evaluationReason =
@@ -448,8 +497,8 @@ export default class RecruitmentService {
         if (this.stopped || !this.available) return;
         let shouldTryAutomatic = false;
         await this.exclusive(async () => {
-            const application = this.application(id);
-            if (!application || application.status !== 'pending') return;
+            const application = await this.activeApplicationLocked(id);
+            if (!application) return;
             application.lookupStatus = evidence.coverageIssues.length ? 'manual' : 'complete';
             application.playerUuid = evidence.playerUuid;
             application.profileId = evidence.profileId;
@@ -483,9 +532,8 @@ export default class RecruitmentService {
     private async tryAutomaticAcceptance(id: string) {
         await this.exclusive(async () => {
             this.requireAvailable();
-            const application = this.application(id);
-            if (!application || application.status !== 'pending' || !application.autoCandidate)
-                return;
+            const application = await this.activeApplicationLocked(id);
+            if (!application?.autoCandidate) return;
             const eligibility = evaluateEligibility(
                 {
                     ...application,
@@ -514,6 +562,10 @@ export default class RecruitmentService {
             this.requireAvailable();
             const application = this.application(id);
             if (!application) return { ok: false, message: 'That application no longer exists.' };
+            if (isExpired(application, this.now())) {
+                await this.activeApplicationLocked(id);
+                return { ok: false, message: EXPIRED_APPLICATION };
+            }
             if (kind === 'deny' && application.status === 'denied')
                 return { ok: true, message: 'That application has already been denied.' };
             if (application.status !== 'pending')
@@ -555,6 +607,12 @@ export default class RecruitmentService {
         application.status = 'accepting';
         application.decision = { kind, actorId, decidedAt: this.now() };
         await this.persist();
+        if (this.now() >= expiresAt(application)) {
+            markExpired(application);
+            application.decision = undefined;
+            await this.persist();
+            return { ok: false, message: EXPIRED_APPLICATION };
+        }
         try {
             this.requireAvailable();
             this.sendAcceptance(application.username);
@@ -756,16 +814,16 @@ export default class RecruitmentService {
 
     // Payload construction is kept beside the application interaction handlers.
     private applicationPayload(application: ApplicationRecord) {
+        const now = this.now();
+        const buttonsDisabled = application.status !== 'pending' || isExpired(application, now);
         const savedAge = application.profileSavedAt
             ? `<t:${Math.floor(application.profileSavedAt / 1000)}:R>`
             : 'Unknown';
         const values = [
             ...applicationReport(application, this.state.settings, this.now()),
             '',
-            `Status: **${statusLabel(application)}**`,
-            `Expires: <t:${Math.floor(
-                (application.receivedAt + JOIN_REQUEST_LIFETIME_MS) / 1000
-            )}:R>`,
+            `Status: **${statusLabel(application, now)}**`,
+            `Expires: <t:${Math.floor(expiresAt(application) / 1000)}:R>`,
             `Estimated networth (includes purse): **${
                 application.networth === undefined
                     ? 'Unavailable'
@@ -779,7 +837,8 @@ export default class RecruitmentService {
             )}**`,
             `Profile snapshot saved: **${savedAge}**`,
         ];
-        if (application.deliveryIssue) values.push(`Notice: ${application.deliveryIssue}`);
+        if (application.deliveryIssue && !isExpired(application, now))
+            values.push(`Notice: ${application.deliveryIssue}`);
         if (
             application.decision?.note &&
             application.status !== 'acceptance-sent' &&
@@ -803,12 +862,12 @@ export default class RecruitmentService {
                         .setCustomId(`${APPLICATION_PREFIX}${application.id}:accept`)
                         .setLabel('Accept')
                         .setStyle(ButtonStyle.Success)
-                        .setDisabled(application.status !== 'pending'),
+                        .setDisabled(buttonsDisabled),
                     new ButtonBuilder()
                         .setCustomId(`${APPLICATION_PREFIX}${application.id}:deny`)
                         .setLabel('Deny')
                         .setStyle(ButtonStyle.Danger)
-                        .setDisabled(application.status !== 'pending')
+                        .setDisabled(buttonsDisabled)
                 ),
             ],
             allowedMentions: { parse: [] as never[] },
@@ -907,8 +966,10 @@ export default class RecruitmentService {
     private async deliverApplicationCardNow(id: string) {
         if (this.stopped || !this.available) return false;
         const application = this.application(id);
+        if (!application || (!application.messageId && isExpired(application, this.now())))
+            return false;
         const targetChannelId =
-            application?.channelId ?? (env.RECRUITMENT_CHANNEL_ID || env.MEMBER_CHANNEL_ID);
+            application.channelId ?? (env.RECRUITMENT_CHANNEL_ID || env.MEMBER_CHANNEL_ID);
         let channel: TextChannel | undefined;
         try {
             channel = await this.resolveChannel(targetChannelId);
@@ -917,7 +978,6 @@ export default class RecruitmentService {
             return false;
         }
         if (
-            !application ||
             !channel ||
             channel.id !== targetChannelId ||
             channel.guildId !== env.DISCORD_SERVER_ID
@@ -933,6 +993,10 @@ export default class RecruitmentService {
                     message = await channel.messages.fetch(application.messageId);
                 } catch (error) {
                     if ((error as { code?: number }).code !== 10008) throw error;
+                    if (isExpired(application, this.now())) {
+                        await this.clearExpiredDeliveryIssue(application);
+                        return false;
+                    }
                     await this.exclusive(async () => {
                         const current = this.application(id);
                         if (current) {
@@ -947,7 +1011,9 @@ export default class RecruitmentService {
                 if (message.channelId !== channel.id || message.guildId !== env.DISCORD_SERVER_ID)
                     throw new Error('Application message is outside its recruitment channel.');
                 await message.edit(payload);
+                await this.clearExpiredDeliveryIssue(application);
             } else if (!application.messageId) {
+                if (isExpired(application, this.now())) return false;
                 const roleId = env.RECRUITMENT_PING_ROLE_ID;
                 const message = await channel.send({
                     ...payload,
@@ -1001,8 +1067,71 @@ export default class RecruitmentService {
         this.deliveryTimers.set(id, timer);
     }
 
+    private async clearExpiredDeliveryIssue(application: ApplicationRecord) {
+        if (application.status !== 'expired' || !application.deliveryIssue) return;
+        await this.exclusive(async () => {
+            const current = this.application(application.id);
+            if (!current || current.status !== 'expired' || !current.deliveryIssue) return;
+            current.deliveryIssue = undefined;
+            await this.persist();
+        });
+    }
+
     private application(id: string) {
         return this.state.applications.find((application) => application.id === id);
+    }
+
+    private async activeApplicationLocked(id: string) {
+        if (this.stopped || !this.available) return undefined;
+        const application = this.application(id);
+        if (!application || application.status !== 'pending') return undefined;
+        if (this.now() < expiresAt(application)) return application;
+        markExpired(application);
+        await this.persist();
+        return undefined;
+    }
+
+    private async expireDueApplications() {
+        return this.exclusive(async () => {
+            const expired: string[] = [];
+            if (this.stopped || !this.available) return expired;
+            const now = this.now();
+            this.state.applications.forEach((application) => {
+                if (application.status !== 'pending' || now < expiresAt(application)) return;
+                markExpired(application);
+                expired.push(application.id);
+            });
+            if (expired.length) await this.persist();
+            this.scheduleExpiry();
+            return expired;
+        });
+    }
+
+    private updateExpiredCards(ids: string[]) {
+        ids.forEach((id) => {
+            this.deliverApplicationCard(id).catch((error: unknown) =>
+                winston.warn('Expired recruitment card could not be updated:', error)
+            );
+        });
+    }
+
+    private scheduleExpiry() {
+        clearTimeout(this.expiryTimer);
+        if (this.stopped || !this.available) return;
+        const next = this.state.applications.reduce(
+            (deadline, application) =>
+                application.status === 'pending'
+                    ? Math.min(deadline, expiresAt(application))
+                    : deadline,
+            Infinity
+        );
+        if (!Number.isFinite(next)) return;
+        this.expiryTimer = setTimeout(() => {
+            this.expireDueApplications()
+                .then((ids) => this.updateExpiredCards(ids))
+                .catch((error: unknown) => winston.warn('Recruitment expiry failed:', error));
+        }, Math.max(0, next - this.now()));
+        this.expiryTimer.unref();
     }
 
     private pruneApplications() {
@@ -1034,7 +1163,19 @@ export default class RecruitmentService {
 
     private recoverInFlightApplications() {
         let changed = false;
+        const now = this.now();
         this.state.applications.forEach((application) => {
+            if (application.status === 'pending') {
+                if (now >= expiresAt(application)) {
+                    markExpired(application);
+                    this.expiredOnRecovery.add(application.id);
+                    changed = true;
+                } else if (application.autoCandidate) {
+                    application.autoCandidate = false;
+                    changed = true;
+                }
+                return;
+            }
             if (application.status !== 'accepting') return;
             application.status = 'needs-verification';
             application.autoCandidate = false;

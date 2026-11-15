@@ -1,5 +1,6 @@
 export type ApplicationStatus =
     | 'pending'
+    | 'expired'
     | 'accepting'
     | 'acceptance-sent'
     | 'denied'

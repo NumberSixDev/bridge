@@ -113,6 +113,9 @@ do not ping again. Leave it blank to disable mentions.
 Application embeds show `Expires` using Discord's automatically updated relative
 timestamp, exactly five minutes after the join notice was received. Delivery
 delays, duplicate notices, card edits and bot restarts do not reset that deadline.
+Expired applications are closed for manual and automatic acceptance. The original
+card shows **Expired** with disabled buttons. A new join request after expiry
+creates a new card and starts a fresh lookup.
 Use **Edit minimums** to enter values such as `1B` and `100M`, then **Enable auto acceptance**
 when ready. Leave a field blank or use `none` to clear it and disable automatic acceptance.
 The explicit Enable/Disable buttons are safe to click more than once. Both non-negative minimums must be set before auto

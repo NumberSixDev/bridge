@@ -565,6 +565,119 @@ test('concurrent application clicks send one acceptance; disconnected, forged an
     assert.ok(message.payload.components[0].components.every((button) => button.data.disabled));
 });
 
+test('accept buttons cannot send at expiry or when the durable write crosses the deadline', async () => {
+    for (const expiresDuringSave of [false, true]) {
+        let clock = NOW;
+        const h = makeService({ now: () => clock });
+        try {
+            await h.service.handleJoinRequest('Applicant');
+            const app = h.store.snapshot().applications[0];
+            const message = h.channel.messagesById.get(app.messageId);
+            clock += expiresDuringSave ? 299_999 : 300_000;
+            const save = h.store.save.bind(h.store);
+            h.store.save = async (state) => {
+                await save(state);
+                if (state.applications[0].status === 'accepting') clock += 1;
+            };
+            const click = fakeInteraction(h, {
+                customId: `recruitment:application:${app.id}:accept`,
+                message,
+            });
+            await click.run();
+            assert.match(click.result.replies[0].content, /application has expired/);
+            assert.equal(click.result.replies[0].ephemeral, true);
+            assert.match(message.payload.embeds[0].data.description, /Status: \*\*Expired\*\*/);
+            assert.ok(
+                message.payload.components[0].components.every((button) => button.data.disabled)
+            );
+            const closed = h.store.snapshot().applications[0];
+            assert.equal(closed.status, 'expired');
+            assert.equal(closed.decision, undefined);
+            assert.deepEqual(h.commands, []);
+        } finally {
+            h.service.stop();
+        }
+    }
+});
+
+test('EARNWORTHY can reapply after a timed-out lookup at the exact five-minute boundary', async () => {
+    let clock = NOW;
+    const h = makeService({ now: () => clock });
+    const calls = [];
+    h.service.lookup = {
+        async lookup(username) {
+            calls.push(username);
+            if (calls.length === 1) throw new Error('The profile lookup timed out.');
+            return evidence({ username, partial: true });
+        },
+    };
+    try {
+        await h.service.handleJoinRequest('EARNWORTHY');
+        const original = h.store.snapshot().applications[0];
+        assert.equal(original.lookupStatus, 'error');
+        clock += 299_999;
+        await h.service.handleJoinRequest('Earnworthy');
+        assert.equal(h.store.snapshot().applications.length, 1);
+        clock += 1;
+        await h.service.handleJoinRequest('earnworthy');
+        const [expired, replacement] = h.store.snapshot().applications;
+        assert.equal(expired.id, original.id);
+        assert.equal(expired.receivedAt, NOW);
+        assert.equal(expired.status, 'expired');
+        assert.equal(expired.lookupStatus, 'error');
+        assert.notEqual(replacement.id, expired.id);
+        assert.notEqual(replacement.messageId, expired.messageId);
+        assert.equal(replacement.receivedAt, clock);
+        assert.equal(replacement.status, 'pending');
+        assert.equal(replacement.networth, 500);
+        assert.deepEqual(calls, ['EARNWORTHY', 'earnworthy']);
+        assert.equal(h.channel.messagesById.size, 2);
+        assert.deepEqual(h.commands, []);
+    } finally {
+        h.service.stop();
+    }
+});
+
+test('a new join request uses a fresh lookup while the expired lookup cannot auto-accept', async () => {
+    let clock = NOW;
+    const h = makeService({ now: () => clock });
+    const calls = [];
+    let release;
+    h.service.lookup = {
+        async lookup(username) {
+            calls.push(username);
+            if (calls.length === 1)
+                return new Promise((resolve) => {
+                    release = resolve;
+                });
+            return evidence({ username, partial: true });
+        },
+    };
+    try {
+        await h.service.setMinimums('1', '1');
+        await h.service.setAutoEnabled(true);
+        const first = h.service.handleJoinRequest('Applicant');
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.equal(typeof release, 'function');
+        clock += 300_000;
+        const second = h.service.handleJoinRequest('APPLICANT');
+        await new Promise((resolve) => setImmediate(resolve));
+        assert.deepEqual(calls, ['Applicant', 'APPLICANT']);
+        release(evidence({ profileSavedAt: clock, calculatedAt: clock, marketObservedAt: clock }));
+        await Promise.all([first, second]);
+        await h.service.onMinecraftReady();
+        const [expired, replacement] = h.store.snapshot().applications;
+        assert.equal(expired.status, 'expired');
+        assert.equal(expired.lookupStatus, 'pending');
+        assert.equal(expired.networth, undefined);
+        assert.equal(replacement.status, 'pending');
+        assert.equal(replacement.partial, true);
+        assert.deepEqual(h.commands, []);
+    } finally {
+        h.service.stop();
+    }
+});
+
 test('changing or disabling settings during lookup prevents automatic acceptance', async () => {
     for (const change of ['disable', 'enable']) {
         const h = makeService();
@@ -857,13 +970,67 @@ test('application expiry uses the original join receipt plus five minutes across
     h.service.stop();
 
     clock += 3 * 60_000;
-    const restarted = makeService({ state: h.store.snapshot(), now: () => clock });
+    const state = h.store.snapshot();
+    state.applications[0].lookupStatus = 'pending';
+    state.applications[0].autoCandidate = true;
+    const retryMessageId = '12345678901234998';
+    state.applications.push(
+        { ...state.applications[0], id: 'missing', messageId: '12345678901234999' },
+        { ...state.applications[0], id: 'unposted', messageId: undefined },
+        {
+            ...state.applications[0],
+            id: 'retry',
+            status: 'expired',
+            autoCandidate: false,
+            messageId: retryMessageId,
+            deliveryIssue: 'Discord temporarily unavailable',
+        }
+    );
+    const restarted = makeService({ state, now: () => clock });
     restarted.channel.messagesById = h.channel.messagesById;
+    const retryMessage = { ...message, id: retryMessageId };
+    restarted.channel.messagesById.set(retryMessageId, retryMessage);
+    const fetched = [];
+    restarted.channel.messages.fetch = async (id) => {
+        fetched.push(id);
+        if (id === retryMessageId && fetched.filter((messageId) => messageId === id).length === 1)
+            throw new Error('Discord temporarily unavailable');
+        const existing = restarted.channel.messagesById.get(id);
+        if (existing) return existing;
+        throw Object.assign(new Error('Unknown Message'), { code: 10008 });
+    };
+    let lookups = 0;
+    restarted.service.lookup = {
+        async lookup(username) {
+            lookups++;
+            return evidence({ username });
+        },
+    };
     try {
         await restarted.service.onDiscordReady();
+        await restarted.service.onMinecraftReady();
         assert.ok(message.payload.embeds[0].data.description.includes(deadline));
-        assert.equal(restarted.channel.messagesById.size, 1);
+        assert.match(message.payload.embeds[0].data.description, /Status: \*\*Expired\*\*/);
+        assert.ok(message.payload.components[0].components.every((button) => button.data.disabled));
+        assert.ok(restarted.store.snapshot().applications.every((app) => app.status === 'expired'));
+        assert.equal(lookups, 0);
+        assert.equal(restarted.channel.messagesById.size, 2);
         assert.deepEqual(restarted.commands, []);
+        assert.deepEqual(fetched, [message.id, '12345678901234999', retryMessageId]);
+        await restarted.service.onDiscordReady();
+        assert.deepEqual(fetched, [
+            message.id,
+            '12345678901234999',
+            retryMessageId,
+            retryMessageId,
+        ]);
+        assert.match(retryMessage.payload.embeds[0].data.description, /Status: \*\*Expired\*\*/);
+        assert.equal(
+            restarted.store.snapshot().applications.find((app) => app.id === 'retry').deliveryIssue,
+            undefined
+        );
+        await restarted.service.onDiscordReady();
+        assert.equal(fetched.length, 4, 'settled historical cards are not fetched on readiness');
     } finally {
         restarted.service.stop();
     }
