@@ -25,6 +25,7 @@ import { compareRankingValues, rankingPosition, sortRankingValues } from './rank
 import { playerLabel } from './presentation';
 import {
     LEADERBOARD_CATEGORIES,
+    GuildMetricTotal,
     GuildRoster,
     LeaderboardCategory,
     LeaderboardDataset,
@@ -56,6 +57,19 @@ const MAX_CACHE_BYTES = 2_000_000;
 const COMMAND_COOLDOWN_MS = 5_000;
 const PAGE_SIZE = 25;
 const BUTTON_PATTERN = /^gleaderboard:([A-Za-z0-9_-]{1,80}):(prev|next)$/;
+const PLAYER_SUMMARY_LABELS: Record<LeaderboardCategory, string> = {
+    networth: 'Networth',
+    purse: 'Purse',
+    collections: 'Collections',
+    skills: 'Skills',
+    bestiary: 'Bestiary',
+    slayer: 'Slayer',
+    dungeons: 'Dungeon completions',
+    mining: 'HotD XP',
+    currencies: 'Motes',
+    stats: 'Base health',
+    rng: 'RNG meter',
+};
 
 interface CachedProfile {
     value: ProfileSnapshot;
@@ -106,7 +120,7 @@ function ageLabel(ageMs: number) {
     return `${Math.floor(minutes / 60)}h ago`;
 }
 
-function valueLabel(value: number, definition: MetricDefinition, approximate: boolean) {
+function valueLabel(value: number, definition: MetricDescriptor, approximate: boolean) {
     const amount = formatAmount(value);
     const suffix =
         definition.unit === 'xp'
@@ -121,6 +135,29 @@ function valueLabel(value: number, definition: MetricDefinition, approximate: bo
             ? ' score'
             : '';
     return `${approximate ? '≈' : ''}${amount}${suffix}`;
+}
+
+function sumGuildValues(rows: Pick<RankedPlayer, 'value' | 'approximate'>[]) {
+    if (!rows.length) return undefined;
+    let value = 0;
+    let approximate = false;
+    for (const row of rows) {
+        value += row.value;
+        approximate ||= row.approximate === true;
+    }
+    return { value, approximate, membersWithData: rows.length };
+}
+
+function hasIncompleteTotal(total: GuildMetricTotal | undefined, rosterCount: number) {
+    return total !== undefined && total.membersWithData < rosterCount;
+}
+
+function reportTotalLabel(entry: PlayerReportEntry | undefined, rosterCount: number) {
+    if (!entry?.guildTotal) return 'Unavailable';
+    const { guildTotal, metric } = entry;
+    return `${valueLabel(guildTotal.value, metric, guildTotal.approximate)}${
+        hasIncompleteTotal(guildTotal, rosterCount) ? '\\*' : ''
+    }`;
 }
 
 function descriptorMetric(descriptor: MetricDescriptor): MetricDefinition {
@@ -928,21 +965,27 @@ export default class LeaderboardService {
             dataset.records.map((record) => [record.username.toLowerCase(), record])
         );
         const subject = records.get(username.toLowerCase());
+        const currentRecords = roster.members.flatMap((member) => {
+            const record = records.get(member.toLowerCase());
+            return record ? [record] : [];
+        });
         const defaultMetrics = dataset.metrics.filter((metric) => metric.default === true);
         const individualMetrics = dataset.metrics.filter((metric) => metric.default !== true);
         const metrics = [...defaultMetrics, ...individualMetrics];
         const entries: PlayerReportEntry[] = metrics.map((metric) => {
             const value = subject?.values[metric.id];
-            if (value === undefined || !finiteNumber(value)) return { metric };
-            const candidates = roster.members.flatMap((member) => {
-                const record = records.get(member.toLowerCase());
-                const memberValue = record?.values[metric.id];
-                return memberValue === undefined || !finiteNumber(memberValue)
-                    ? []
-                    : record
-                    ? [{ username: record.username, value: memberValue }]
-                    : [];
-            });
+            const candidates = [];
+            for (const record of currentRecords) {
+                const memberValue = record.values[metric.id];
+                if (!finiteNumber(memberValue)) continue;
+                candidates.push({
+                    username: record.username,
+                    value: memberValue,
+                    approximate: record.approximate[metric.id] === true,
+                });
+            }
+            const guildTotal = sumGuildValues(candidates);
+            if (value === undefined || !finiteNumber(value)) return { metric, guildTotal };
             const position = rankingPosition(username, candidates);
             return {
                 metric,
@@ -950,6 +993,7 @@ export default class LeaderboardService {
                 approximate: subject?.approximate[metric.id] === true,
                 position: position?.position,
                 rankedMembers: position?.rankedMembers,
+                guildTotal,
             };
         });
         entries.sort(
@@ -1119,7 +1163,16 @@ export default class LeaderboardService {
         const pageCount = this.pageCount(snapshot.rows);
         const boundedPage = Math.min(Math.max(page, 0), pageCount - 1);
         const rows = snapshot.rows.slice(boundedPage * PAGE_SIZE, (boundedPage + 1) * PAGE_SIZE);
+        const guildTotal = sumGuildValues(snapshot.rows);
+        const totalLabel = hasIncompleteTotal(guildTotal, snapshot.rosterCount)
+            ? 'Guild total (available data)'
+            : 'Guild total';
         const description = [
+            `**${totalLabel}:** ${
+                guildTotal
+                    ? valueLabel(guildTotal.value, snapshot.metric, guildTotal.approximate)
+                    : 'Unavailable'
+            }`,
             `Ranked **${snapshot.rows.length}** of **${snapshot.rosterCount}** current guild members.`,
             snapshot.statsUpdatedAt !== undefined
                 ? `Stats updated: **${ageLabel(this.now() - snapshot.statsUpdatedAt)}**${
@@ -1179,7 +1232,28 @@ export default class LeaderboardService {
             boundedPage * PAGE_SIZE,
             (boundedPage + 1) * PAGE_SIZE
         );
+        const defaults = LEADERBOARD_CATEGORIES.map((category) =>
+            report.entries.find(
+                (entry) => entry.metric.default && entry.metric.category === category
+            )
+        );
+        const defaultTotals = LEADERBOARD_CATEGORIES.map(
+            (category, index) =>
+                `${PLAYER_SUMMARY_LABELS[category]} ${reportTotalLabel(
+                    defaults[index],
+                    report.rosterCount
+                )}`
+        );
+        const showsIncompleteTotal = [...defaults, ...entries].some((entry) =>
+            hasIncompleteTotal(entry?.guildTotal, report.rosterCount)
+        );
         const description = [
+            '**Guild totals**',
+            defaultTotals.slice(0, 4).join(' · '),
+            defaultTotals.slice(4, 8).join(' · '),
+            defaultTotals.slice(8).join(' · '),
+            ...(showsIncompleteTotal ? ['\\* Available data only.'] : []),
+            '',
             `Player: **${playerLabel(report.username, report.rank)}**.`,
             `Current guild members: **${report.rosterCount}**.`,
             `Stats updated: **${ageLabel(this.now() - report.datasetCompletedAt)}**${
@@ -1188,7 +1262,6 @@ export default class LeaderboardService {
             '',
             entries
                 .map((entry) => {
-                    const definition = descriptorMetric(entry.metric);
                     const category =
                         entry.metric.category === 'rng'
                             ? 'RNG'
@@ -1197,7 +1270,7 @@ export default class LeaderboardService {
                     const value =
                         entry.value === undefined
                             ? 'Unavailable'
-                            : valueLabel(entry.value, definition, entry.approximate === true);
+                            : valueLabel(entry.value, entry.metric, entry.approximate === true);
                     const position =
                         entry.position === undefined || entry.rankedMembers === undefined
                             ? 'Unranked'
@@ -1205,7 +1278,7 @@ export default class LeaderboardService {
                     return `**${position}** · ${category} · ${entry.metric.label.slice(
                         0,
                         64
-                    )} — ${value}`;
+                    )} — ${value} · Guild ${reportTotalLabel(entry, report.rosterCount)}`;
                 })
                 .join('\n'),
         ].join('\n');

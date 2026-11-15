@@ -133,6 +133,13 @@ export interface PlayerReportEntry {
     approximate?: boolean;
     position?: number;
     rankedMembers?: number;
+    guildTotal?: GuildMetricTotal;
+}
+
+export interface GuildMetricTotal {
+    value: number;
+    approximate: boolean;
+    membersWithData: number;
 }
 
 export interface PlayerReport {

@@ -187,6 +187,11 @@ displayed. Results are stable for the ten-minute button session, which is bound
 to its original guild, channel and message. Buttons re-check current membership
 before changing page.
 
+Each ranking shows a guild total for its selected stat across all current
+members with usable data, including members on other pages. Player reports show
+the default stat totals at the top and the corresponding guild total beside
+each individual stat. Totals based on incomplete coverage are marked.
+
 Completed numeric stats refresh in the background every five minutes while
 Minecraft is ready. A usable result can render immediately with its `Stats
 updated` age while a refresh runs; results older than fifteen minutes are not

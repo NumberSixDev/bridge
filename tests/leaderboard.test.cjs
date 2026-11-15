@@ -20,6 +20,7 @@ const {
 } = require('../dist/src/leaderboard/roster.js');
 const { DragSimLeaderboardClient } = require('../dist/src/leaderboard/api.js');
 const { metricDefinitions, findMetricDefinition } = require('../dist/src/leaderboard/metrics.js');
+const { LEADERBOARD_CATEGORIES } = require('../dist/src/leaderboard/types.js');
 const LeaderboardService = require('../dist/src/leaderboard/service.js').default;
 
 test('leaderboard API releases queue slots when fetch or body reading ignores abort', async () => {
@@ -598,7 +599,7 @@ function richProfile(username, coins = 1) {
 }
 
 test('leaderboard service ranks only the current roster, paginates 25 rows, and isolates buttons', async () => {
-    const names = ['Master', ...Array.from({ length: 26 }, (_, index) => `Member${index + 1}`)];
+    let names = ['Master', ...Array.from({ length: 26 }, (_, index) => `Member${index + 1}`)];
     let rosterRequest = 0;
     const lookup = {
         async getProfile(username) {
@@ -628,6 +629,7 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     assert.equal(rosterRequest, 1);
     const payload = command.calls.find(([name]) => name === 'editReply')[1];
     assert.match(payload.embeds[0].data.description, /Master/);
+    assert.match(payload.embeds[0].data.description, /^\*\*Guild total:\*\* 1\.35k\n/);
     assert.match(payload.embeds[0].data.footer.text, /Page 1\/2/);
     const searchTime = payload.embeds[0].data.footer.text.match(
         /Time Taken to Search: (\d+\.\d{2})s/
@@ -660,6 +662,7 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     await service.handleInteraction(button);
     assert.equal(buttonCalls[0][0], 'deferUpdate');
     assert.match(buttonCalls[1][1].embeds[0].data.description, /Member1/);
+    assert.match(buttonCalls[1][1].embeds[0].data.description, /^\*\*Guild total:\*\* 1\.35k\n/);
     assert.match(buttonCalls[1][1].embeds[0].data.footer.text, /Page 2\/2/);
     assert.ok(
         buttonCalls[1][1].embeds[0].data.footer.text.split('\n')[0].endsWith(searchTime[0]),
@@ -676,6 +679,73 @@ test('leaderboard service ranks only the current roster, paginates 25 rows, and 
     };
     await service.handleInteraction(wrongChannel);
     assert.equal(buttonCalls.at(-1)[1].ephemeral, true);
+
+    names = names.slice(1);
+    service.roster.disconnected();
+    const secondPage = buttonCalls[1][1];
+    await service.handleInteraction({
+        ...button,
+        customId: secondPage.components[0].components[0].data.custom_id,
+        message: { ...button.message, embeds: [secondPage.embeds[0].toJSON()] },
+    });
+    assert.match(buttonCalls.at(-1)[1].embeds[0].data.description, /^\*\*Guild total:\*\* 351\n/);
+    service.stop();
+});
+
+test('guild totals use the selected stat and distinguish private or unavailable values from zero', async () => {
+    const members = ['One', 'Two', 'Three'];
+    const roster = { members, observedAt: 1_000 };
+    let profileCalls = 0;
+    let networthCalls = 0;
+    const service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand() {},
+        now: () => 1_000,
+        cooldownMs: 0,
+        lookup: {
+            async getProfile(username) {
+                profileCalls++;
+                return profile({
+                    username,
+                    inventoryHidden: username === 'Three',
+                    profile: { coins: 0, skills: { combat: 1_500, mining: 100 } },
+                });
+            },
+            async getNetworth(username, profileId) {
+                networthCalls++;
+                return {
+                    username,
+                    profileId,
+                    total: { One: 1_500, Two: 0, Three: 1_000_000 }[username],
+                    hidden: false,
+                    partial: username === 'One',
+                };
+            },
+        },
+    });
+    service.roster.getRoster = async () => roster;
+    try {
+        for (const [category, stat, expected] of [
+            ['networth', null, '**Guild total (available data):** ≈1.5k'],
+            ['purse', null, '**Guild total:** 0'],
+            ['skills', 'skills.combat', '**Guild total:** 4.5k XP'],
+            ['bestiary', null, '**Guild total:** Unavailable'],
+        ]) {
+            const command = makeCommandInteraction(category);
+            command.interaction.options.getString = () => stat;
+            await service.handleCommand(command.interaction);
+            const description = command.calls.at(-1)[1].embeds[0].data.description;
+            assert.equal(description.split('\n')[0], expected);
+            if (category === 'networth') {
+                assert.match(description, /Ranked \*\*2\*\* of \*\*3\*\*/);
+                assert.doesNotMatch(description, /Three/);
+            }
+        }
+        assert.equal(profileCalls, members.length);
+        assert.equal(networthCalls, members.length);
+    } finally {
+        service.stop();
+    }
 });
 
 test('player report uses shared tie ranking, API rank, 25-entry pages, and rejects nonmembers before API work', async () => {
@@ -703,6 +773,13 @@ test('player report uses shared tie ranking, API rank, 25-entry pages, and rejec
     await service.handleCommand(command.interaction);
     const initial = command.calls.find(([name]) => name === 'editReply')[1];
     assert.equal(profileCalls, names.length);
+    const summary = initial.embeds[0].data.description.split('\n').slice(0, 4);
+    assert.deepEqual(summary, [
+        '**Guild totals**',
+        'Networth 2.7k · Purse 2.7k · Collections 405 count · Skills 2.02k XP',
+        'Bestiary 189 kills · Slayer 2.7k XP · Dungeon completions 108 count · HotD XP 5.4k XP',
+        'Motes 540 · Base health 27k · RNG meter 162 kills',
+    ]);
     assert.match(initial.embeds[0].data.description, /Player: \*\*Member1\*\*/);
     assert.match(initial.embeds[0].data.description, /^\*\*#2\*\* · /m);
     assert.doesNotMatch(initial.embeds[0].data.description, /\[MVP\+\] Member1/);
@@ -731,6 +808,7 @@ test('player report uses shared tie ranking, API rank, 25-entry pages, and rejec
         },
     });
     assert.match(buttonCalls[0].embeds[0].data.footer.text, /Report page 2\/2/);
+    assert.deepEqual(buttonCalls[0].embeds[0].data.description.split('\n').slice(0, 4), summary);
     assert.equal(profileCalls, names.length, 'paging reuses one shared dataset');
 
     const nonmember = makePlayerInteraction('NotInGuild', 'other-player');
@@ -764,7 +842,13 @@ test('player reports sort best positions first, unavailable last and capitalise 
             {
                 username: 'Other',
                 profileId: 'two',
-                values: { networth: 100, purse: 50, rng: 10 },
+                values: { networth: 100, purse: 50, rng: 10, collections: 29 },
+                approximate: { networth: true },
+            },
+            {
+                username: 'Departed',
+                profileId: 'three',
+                values: { networth: 9_000, collections: 9_000 },
                 approximate: {},
             },
         ],
@@ -787,9 +871,57 @@ test('player reports sort best positions first, unavailable last and capitalise 
     const description = payload.embeds[0].data.description;
     assert.match(description, /^\*\*#1\*\* · Purse/m);
     assert.match(description, /^\*\*#1\*\* · RNG/m);
-    assert.match(description, /^\*\*#2\*\* · Networth/m);
-    assert.match(description, /^\*\*Unranked\*\* · Collections .*Unavailable/m);
+    assert.match(description, /^\*\*#2\*\* · Networth · networth — 50 · Guild ≈150$/m);
+    assert.match(
+        description,
+        /^\*\*Unranked\*\* · Collections · collections — Unavailable · Guild 29\\\*$/m
+    );
+    assert.match(description, /^\\\* Available data only\.$/m);
     assert.doesNotMatch(description, /^\*\*\d+\./m);
+    service.stop();
+});
+
+test('all player report pages fit Discord limits at the maximum dataset size', () => {
+    const service = new LeaderboardService({
+        isMinecraftReady: () => true,
+        sendMinecraftCommand() {},
+    });
+    const defaults = LEADERBOARD_CATEGORIES.map((category) =>
+        metricDefinitions(category).find((metric) => metric.default)
+    );
+    const metrics = defaults.concat(
+        Array.from({ length: 1_000 - defaults.length }, (_, index) => ({
+            id: `collections.custom${index}`,
+            category: 'collections',
+            label: 'A'.repeat(128),
+            unit: 'kills',
+        }))
+    );
+    const members = Array.from({ length: 500 }, (_, index) => `LongPlayer${index}`.padEnd(16, 'x'));
+    const values = Object.fromEntries(
+        metrics.map((metric) => [metric.id, Number.MAX_SAFE_INTEGER])
+    );
+    const approximate = Object.fromEntries(metrics.map((metric) => [metric.id, true]));
+    const report = service.buildPlayerReport(
+        {
+            completedAt: Date.now(),
+            metrics,
+            records: members.slice(0, -1).map((username) => ({ username, values, approximate })),
+        },
+        { members, observedAt: Date.now() },
+        members[0],
+        12
+    );
+    report.statsRefreshOngoing = true;
+    for (let page = 0; page < 40; page++) {
+        const embed = service.reportPayload({ id: 'test', report }, page).embeds[0].toJSON();
+        assert.match(embed.footer.text, new RegExp(`Report page ${page + 1}/40`));
+        assert.equal((embed.description.match(/^\*\*#\d+\*\* · /gm) || []).length, 25);
+        assert.ok(embed.description.length <= 4_096);
+        assert.ok(
+            embed.title.length + embed.description.length + embed.footer.text.length <= 6_000
+        );
+    }
     service.stop();
 });
 
@@ -988,10 +1120,12 @@ test('player report pages recalculate departed members and retain the original s
     }
     await page('next');
     assert.match(payload.embeds[0].data.footer.text, /Report page 2\/2/);
+    assert.match(payload.embeds[0].data.description, /Networth 200 · Purse 200/);
     names = ['Member1'];
     service.roster.disconnected();
     await page('prev');
     assert.match(payload.embeds[0].data.description, /^\*\*#1\*\* · /m);
+    assert.match(payload.embeds[0].data.description, /Networth 100 · Purse 100/);
     assert.equal(payload.embeds[0].data.footer.text.split(' • ')[1], footerTime);
     names = ['Master'];
     service.roster.disconnected();
