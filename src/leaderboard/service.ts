@@ -25,6 +25,8 @@ import { compareRankingValues, rankingPosition, sortRankingValues } from './rank
 import { playerLabel } from './presentation';
 import {
     LEADERBOARD_CATEGORIES,
+    STATS_MAX_STALE_MS,
+    STATS_REFRESH_TIMEOUT_MS,
     GuildMetricTotal,
     GuildRoster,
     LeaderboardCategory,
@@ -46,7 +48,6 @@ import {
 const PROFILE_CACHE_MS = 5 * 60_000;
 const NETWORTH_CACHE_MS = 5 * 60_000;
 const STATS_FRESH_MS = 5 * 60_000;
-const STATS_MAX_STALE_MS = 15 * 60_000;
 const STATS_REFRESH_MS = 5 * 60_000;
 const SESSION_TTL_MS = 10 * 60_000;
 const MAX_SESSIONS = 100;
@@ -98,6 +99,7 @@ interface LeaderboardSession {
 export interface LeaderboardServiceOptions {
     sendMinecraftCommand: (command: string) => void;
     isMinecraftReady: () => boolean;
+    isMinecraftPaused?: () => boolean;
     lookup?: LeaderboardLookupClient;
     now?: () => number;
     cooldownMs?: number;
@@ -232,14 +234,23 @@ export default class LeaderboardService {
         this.cooldownMs = options.cooldownMs ?? COMMAND_COOLDOWN_MS;
         this.dataDir = options.dataDir;
         this.lookupTimeoutMs = options.lookupTimeoutMs ?? 20_000;
-        this.refreshTimeoutMs = options.refreshTimeoutMs ?? 240_000;
+        this.refreshTimeoutMs = options.refreshTimeoutMs ?? STATS_REFRESH_TIMEOUT_MS;
         this.responseTimeoutMs = options.responseTimeoutMs ?? 15_000;
         this.dataset = this.loadDataset();
         this.roster = new GuildRosterCollector({
             sendCommand: options.sendMinecraftCommand,
             isMinecraftReady: options.isMinecraftReady,
+            isMinecraftPaused: options.isMinecraftPaused,
             now: this.now,
         });
+    }
+
+    public get health() {
+        return {
+            rosterObservedAt: this.roster.observedAt,
+            datasetCompletedAt: this.dataset?.includesNetworth ? this.dataset.completedAt : null,
+            refreshing: this.roster.inFlight || this.refreshing || Boolean(this.refreshPromise),
+        };
     }
 
     public ownsInteraction(interaction: { customId?: string }) {

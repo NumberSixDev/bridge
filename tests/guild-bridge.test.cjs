@@ -12,6 +12,7 @@ Object.assign(process.env, {
     STAFF_ROLE_ID: '',
     USE_PROFANITY_FILTER: 'false',
     USE_FIRST_WORD_OF_AUTHOR_NAME: 'false',
+    MINECRAFT_ENABLED: 'true',
     MINECRAFT_HOST: 'dragsim.co',
     MINECRAFT_VERSION: '1.21.4',
     MINECRAFT_CHAT_COMMAND: '/gc',
@@ -358,6 +359,11 @@ test('configuration requires credentials and valid single-guild IDs and chat com
     assert.equal(parsed.success, true);
     assert.equal(parsed.data.BOT_OWNER_ID, '');
     assert.equal(parsed.data.STAFF_ROLE_ID, '');
+    assert.equal(parsed.data.MINECRAFT_ENABLED, true);
+    assert.equal(
+        envSchema.parse({ ...valid, MINECRAFT_ENABLED: 'false' }).MINECRAFT_ENABLED,
+        false
+    );
     assert.equal(parsed.data.GUILD_AUTO_ACCEPT_ENABLED, false);
     assert.equal(
         envSchema.parse({ ...valid, GUILD_AUTO_ACCEPT_ENABLED: 'true' }).GUILD_AUTO_ACCEPT_ENABLED,

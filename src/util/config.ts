@@ -22,6 +22,7 @@ const recruitmentRoleIds = z
 // eslint-disable-next-line import/prefer-default-export
 export const envSchema = z
     .object({
+        MINECRAFT_ENABLED: boolean.default(true),
         MINECRAFT_EMAIL: z.string().email(),
         MINECRAFT_HOST: z.string().trim().min(1).default('dragsim.co'),
         MINECRAFT_PORT: z.coerce.number().int().min(1).max(65535).default(25565),

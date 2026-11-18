@@ -8,7 +8,17 @@ export default {
     name: 'interactionCreate',
     runOnce: false,
     run: async (bridge, interaction: Interaction) => {
-        if (!interaction.inCachedGuild() || interaction.guildId !== env.DISCORD_SERVER_ID) return;
+        if (interaction.guildId !== env.DISCORD_SERVER_ID) return;
+        if (!interaction.inCachedGuild()) {
+            if (interaction.isChatInputCommand()) {
+                await interaction.reply({
+                    content:
+                        'The bridge is waiting for Discord guild data. Please try again shortly.',
+                    ephemeral: true,
+                });
+            }
+            return;
+        }
 
         if (typeof interaction.isAutocomplete === 'function' && interaction.isAutocomplete()) {
             if (interaction.commandName !== 'gleaderboard') return;
@@ -105,7 +115,13 @@ export default {
 
         if (!interaction.isChatInputCommand()) return;
         const command = bridge.discord.commands.get(interaction.commandName);
-        if (!command) return;
+        if (!command) {
+            await interaction.reply({
+                content: 'This command is unavailable. Try another command from the bridge.',
+                ephemeral: true,
+            });
+            return;
+        }
         if (
             (command.staffOnly || command.recruitmentOnly || command.staffChannelOnly) &&
             !isStaffCommandChannel(interaction)

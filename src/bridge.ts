@@ -3,6 +3,7 @@ import winston from 'winston';
 import env from '@util/env';
 import Discord from '@discord/discord';
 import Mineflayer from '@mineflayer/mineflayer';
+import { RuntimeHealthReporter } from '@util/runtime-health';
 import LeaderboardService from './leaderboard/service';
 import RecruitmentService from './recruitment/service';
 import PurgeService from './purge/service';
@@ -20,8 +21,27 @@ export default class Bridge {
     public readonly leaderboard = new LeaderboardService({
         sendMinecraftCommand: (command) => this.mineflayer.execute(command),
         isMinecraftReady: () => this.mineflayer.isReady,
+        isMinecraftPaused: () => !env.MINECRAFT_ENABLED,
         dataDir: env.RECRUITMENT_DATA_DIR,
     });
+    private registeredCommands = 0;
+    private stopped = false;
+    private readonly health = new RuntimeHealthReporter(env.RECRUITMENT_DATA_DIR, () => ({
+        discord: {
+            ready:
+                this.discord.isReady() &&
+                this.discord.listenerCount('interactionCreate') > 0 &&
+                this.registeredCommands === this.discord.commands.size,
+            registeredCommands: this.registeredCommands,
+        },
+        minecraft: {
+            enabled: env.MINECRAFT_ENABLED,
+            ready: this.mineflayer.isReady,
+            connectedAt: this.mineflayer.connectedAt,
+        },
+        afk: { configured: env.MINECRAFT_AFK_ENABLED, active: this.mineflayer.isAfkActive },
+        leaderboard: this.leaderboard.health,
+    }));
     public readonly recruitment = new RecruitmentService({
         getChannel: () => this.discord.memberChannel,
         resolveChannel: async (id) => {
@@ -50,6 +70,7 @@ export default class Bridge {
     });
 
     constructor() {
+        this.health.start();
         this.start().catch((error: unknown) => {
             winston.error('Bridge startup failed:', error);
             this.stop();
@@ -60,6 +81,9 @@ export default class Bridge {
     }
 
     public stop() {
+        if (this.stopped) return;
+        this.stopped = true;
+        this.health.stop();
         this.leaderboard.stop();
         this.recruitment.stop();
         this.purge.stop();
@@ -67,8 +91,13 @@ export default class Bridge {
         this.discord.destroy();
     }
 
+    public recordDiscordCommands(count: number) {
+        this.registeredCommands = count;
+        this.health.publish();
+    }
+
     private async start() {
         await Promise.all([this.discord.loadCommands(), this.discord.loadEvents(this)]);
-        await this.discord.login(env.DISCORD_TOKEN);
+        if (!this.stopped) await this.discord.login(env.DISCORD_TOKEN);
     }
 }

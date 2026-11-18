@@ -76,6 +76,8 @@ history/
 .env.test
 .minecraft-auth/
 .bridge-data/
+runtime-health.json
+runtime-health.*.tmp
 
 # Blacklist file
 src/blacklist/_blacklist.json

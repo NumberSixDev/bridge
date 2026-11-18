@@ -17,6 +17,7 @@ export default {
     runOnce: false,
     run: async (bridge, message: Message) => {
         if (
+            !env.MINECRAFT_ENABLED ||
             message.guildId !== env.DISCORD_SERVER_ID ||
             message.channelId !== env.MEMBER_CHANNEL_ID ||
             message.author.bot ||

@@ -1,3 +1,21 @@
+# Discord command availability and two-hour health checks, 18 November 2026
+
+## Goal and decisions
+
+-   IN PROGRESS. Repair Discord command non-response, especially /gleaderboard networth, and create a two-hour scheduled health check.
+-   Verified immediate cause: the approved LaunchAgent is unloaded following Ben's explicit temporary disconnect. No Discord process exists to acknowledge commands. The existing networth handler already defers before roster/API waits.
+-   Preserve the current Minecraft pause. Add an explicit MINECRAFT_ENABLED switch (default true); false keeps Discord and its commands online without creating a Minecraft client. Do not reconnect the account until Ben requests it. Keep AFK enabled for later resumption.
+-   Add a small local health snapshot/check covering Discord readiness, intentional pause versus connection failure, AFK, and leaderboard freshness. Never expose credentials/player inventories, send test messages, decide applications, or kick players.
+-   Existing membership validation stays strict: disconnected commands respond clearly; no stale roster is used to fabricate a current guild ranking.
+-   Owner configures the native two-hour thread heartbeat, performs final verification, commits and pushes only scoped changes as NumberSixDev, then starts the established service in Discord-only mode. No new service, sleep changes, billing changes or GitHub CI enablement.
+
+## Verification and remaining work
+
+-   Branch feat/dragsim-guild-chat; clean checkout; one fetch confirms origin and HEAD match. Preserve origin NumberSixDev/bridge and upstream MiscGuild/bridge.
+-   Native thread heartbeat `check-dragsim-guild-bridge` created and read back ACTIVE every two hours, with failed-run notifications. It respects intentional pause/full-shutdown state and permits only bounded in-scope repairs through the established service.
+-   Read-only live checks: Discord still registers all9 commands including gleaderboard/networth; official player plus matching networth API returned usable numeric evidence in1.95 seconds (partial valuation is normal).
+-   Pending: bounded implementation, regression/build/format/config checks, real Discord-only readiness and paused command-path validation, commit/push verification.
+
 # Recruitment request expiry, 15 November 2026
 
 -   Fixed expired pending applications suppressing later genuine join requests. The affected player had a six-hour-old pending record after a profile API timeout; its original Discord card existed, but subsequent requests were treated as duplicates. The production API client now returns verified identity and numeric networth/purse in 1.59 seconds; its partial valuation correctly requires manual review.

@@ -1,3 +1,6 @@
+export const STATS_MAX_STALE_MS = 15 * 60_000;
+export const STATS_REFRESH_TIMEOUT_MS = 240_000;
+
 export const LEADERBOARD_CATEGORIES = [
     'networth',
     'purse',

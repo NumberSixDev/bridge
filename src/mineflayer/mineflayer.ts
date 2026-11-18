@@ -4,6 +4,7 @@ import winston from 'winston';
 import path from 'path';
 import loadEvents from '@util/load-events';
 import { guildCommand, singleLine } from '@util/guild-chat';
+import minecraftPausedMessage from '@util/minecraft-paused';
 import Bridge from '../bridge';
 import AfkKeeper from './afk';
 
@@ -13,7 +14,7 @@ const RETRY_MAX_MS = 60_000;
 
 export default class Mineflayer {
     private bot?: Bot;
-    private ready = false;
+    private readyAt?: number;
     private stopping = false;
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
@@ -29,13 +30,22 @@ export default class Mineflayer {
     }
 
     public get isReady() {
-        return this.ready && !this.stopping && Boolean(this.bot);
+        return this.readyAt !== undefined && !this.stopping && Boolean(this.bot);
+    }
+
+    public get connectedAt() {
+        return this.readyAt ?? null;
+    }
+
+    public get isAfkActive() {
+        return this.afk?.isActive ?? false;
     }
 
     public async connect(bridge: Bridge) {
+        if (!env.MINECRAFT_ENABLED) throw new Error(minecraftPausedMessage);
         if (this.bot || this.reconnectTimer) return;
         this.stopping = false;
-        this.ready = false;
+        this.readyAt = undefined;
         let bot: Bot;
         try {
             bot = this.createClient({
@@ -111,7 +121,7 @@ export default class Mineflayer {
     private recoverConnection(bot: Bot, bridge: Bridge, reason: string, close = true) {
         if (this.bot !== bot) return;
         this.bot = undefined;
-        this.ready = false;
+        this.readyAt = undefined;
         this.clearConnectionTimers();
         this.afk?.stop();
         this.afk = undefined;
@@ -193,7 +203,7 @@ export default class Mineflayer {
         if (this.bot !== bot || this.stopping) return;
         this.clearConnectionTimers();
         this.retryAttempt = 0;
-        this.ready = true;
+        this.readyAt = Date.now();
         if (env.MINECRAFT_AFK_ENABLED) {
             this.afk?.stop();
             this.afk = new AfkKeeper({
@@ -228,7 +238,8 @@ export default class Mineflayer {
     }
 
     public execute(message: string) {
-        if (!this.ready || !this.bot)
+        if (!env.MINECRAFT_ENABLED) throw new Error(minecraftPausedMessage);
+        if (!this.isReady || !this.bot)
             throw new Error('Minecraft is not connected yet. Please try again shortly.');
         if (message !== singleLine(message) || message.length > 256 || !message.startsWith('/')) {
             throw new Error('Use one command of at most 256 characters.');
@@ -238,7 +249,7 @@ export default class Mineflayer {
 
     public stop() {
         this.stopping = true;
-        this.ready = false;
+        this.readyAt = undefined;
         this.afk?.stop();
         this.afk = undefined;
         clearTimeout(this.reconnectTimer);

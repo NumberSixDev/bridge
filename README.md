@@ -303,12 +303,32 @@ this checkout and reads the local `.env`. Logs are in `logs/launchd.log` and
 # Check the running service
 launchctl print "gui/$(id -u)/com.numbersixdev.dragsim-guild-bridge"
 
-# Stop it, including automatic restarts for the current login session
+# Shut down the whole bridge, including Discord and automatic restarts for this login session
 launchctl bootout "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.numbersixdev.dragsim-guild-bridge.plist"
 
 # Start it again
 launchctl bootstrap "gui/$(id -u)" "$HOME/Library/LaunchAgents/com.numbersixdev.dragsim-guild-bridge.plist"
 ```
+
+To temporarily pause Minecraft and keep Discord commands available, set
+`MINECRAFT_ENABLED=false` in the local `.env` and restart the LaunchAgent:
+
+```sh
+launchctl kickstart -k "gui/$(id -u)/com.numbersixdev.dragsim-guild-bridge"
+```
+
+Use `bootstrap` above if the service is unloaded. Minecraft relay and AFK rewards
+pause together. Leaderboard commands explain the pause because they require a
+current Minecraft roster. To resume, set `MINECRAFT_ENABLED=true` and restart
+the service again. These steps use the existing login, sleep and CI settings.
+
+Run `pnpm check-health` from this checkout after building. The check reads a
+private local snapshot updated every 30 seconds in `RECRUITMENT_DATA_DIR`
+(`.bridge-data` by default). It checks the running process, Discord command
+registration, Minecraft and AFK status, and roster and leaderboard cache age.
+An intentional pause passes in Discord-only mode. Minecraft and the cache have
+a short startup window to warm up. Pass `--pid <bridge-process-id>` to require the
+PID shown by `launchctl print`. The check is local and read-only.
 
 Do not sign the bot's Minecraft account into the game while the bridge is using
 it. Normal play and relay tests should use a different account.

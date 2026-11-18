@@ -1,6 +1,7 @@
 /* eslint-disable no-restricted-syntax, class-methods-use-this, prefer-destructuring */
 
 import winston from 'winston';
+import minecraftPausedMessage from '@util/minecraft-paused';
 import { GuildRoster } from './types';
 
 export const GUILD_LIST_GROUPS = ['Guild Master', 'Admin', 'Staff', 'Bridge', 'Member'] as const;
@@ -24,6 +25,7 @@ export interface GuildListHeader {
 export interface GuildRosterCollectorOptions {
     sendCommand: (command: string) => void;
     isMinecraftReady: () => boolean;
+    isMinecraftPaused?: () => boolean;
     now?: () => number;
     timeoutMs?: number;
     cacheMs?: number;
@@ -91,15 +93,18 @@ function cloneRoster(roster: GuildRoster): GuildRoster {
 export class GuildRosterCollector {
     private readonly sendCommand: (command: string) => void;
     private readonly isMinecraftReady: () => boolean;
+    private readonly isMinecraftPaused?: () => boolean;
     private readonly now: () => number;
     private readonly timeoutMs: number;
     private readonly cacheMs: number;
     private cache?: GuildRoster;
+    private lastObservedAt: number | null = null;
     private pending?: PendingRoster;
 
     constructor(options: GuildRosterCollectorOptions) {
         this.sendCommand = options.sendCommand;
         this.isMinecraftReady = options.isMinecraftReady;
+        this.isMinecraftPaused = options.isMinecraftPaused;
         this.now = options.now ?? Date.now;
         this.timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
         this.cacheMs = options.cacheMs ?? GUILD_ROSTER_REFRESH_MS;
@@ -109,7 +114,12 @@ export class GuildRosterCollector {
         return Boolean(this.pending);
     }
 
+    public get observedAt() {
+        return this.lastObservedAt;
+    }
+
     public getRoster(forceRefresh = false): Promise<GuildRoster> {
+        if (this.isMinecraftPaused?.()) return Promise.reject(new Error(minecraftPausedMessage));
         if (!forceRefresh && this.cache && this.now() - this.cache.observedAt < this.cacheMs) {
             return Promise.resolve(cloneRoster(this.cache));
         }
@@ -220,6 +230,7 @@ export class GuildRosterCollector {
 
     public disconnected() {
         this.cache = undefined;
+        this.lastObservedAt = null;
         if (this.pending)
             this.failPending('Minecraft disconnected before the guild list completed.');
     }
@@ -270,6 +281,7 @@ export class GuildRosterCollector {
         const guildMaster = pending.groups.get('Guild Master')?.members[0];
         const roster = { members, guildMaster, observedAt: this.now() };
         this.cache = roster;
+        this.lastObservedAt = roster.observedAt;
         winston.info(
             `Guild leaderboard roster verified: ${members.length} members across ${pending.groups.size} ranks.`
         );

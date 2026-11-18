@@ -1,5 +1,6 @@
 import { ActivityType, TextChannel } from 'discord.js';
 import env from '@util/env';
+import winston from 'winston';
 
 export default {
     name: 'clientReady',
@@ -20,11 +21,20 @@ export default {
                 );
             }
             bridge.discord.memberChannel = channel;
-            await bridge.discord.application!.commands.set(
+            const registered = await bridge.discord.application!.commands.set(
                 bridge.discord.commands.map((command) => command.data),
                 env.DISCORD_SERVER_ID
             );
+            bridge.recordDiscordCommands(registered.size);
             await bridge.recruitment.onDiscordReady();
+            if (!bridge.discord.isReady()) return;
+            if (!env.MINECRAFT_ENABLED) {
+                bridge.discord.user!.setActivity('Minecraft paused', {
+                    type: ActivityType.Watching,
+                });
+                winston.info('Discord commands are ready. The Minecraft connection is paused.');
+                return;
+            }
             bridge.discord.user!.setActivity('DragSim guild chat', { type: ActivityType.Watching });
             await bridge.mineflayer.connect(bridge);
         } catch (error) {

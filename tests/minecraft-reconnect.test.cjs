@@ -3,6 +3,7 @@ const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
 
 Object.assign(process.env, {
+    MINECRAFT_ENABLED: 'true',
     MINECRAFT_EMAIL: 'bridge@example.test',
     DISCORD_TOKEN: 'test-token',
     DISCORD_SERVER_ID: '12345678901234567',
