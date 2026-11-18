@@ -2,19 +2,21 @@
 
 ## Goal and decisions
 
--   IN PROGRESS. Repair Discord command non-response, especially /gleaderboard networth, and create a two-hour scheduled health check.
+-   RELEASED AND USER-VERIFIED. Repaired Discord command non-response, especially /gleaderboard networth, and created a two-hour scheduled health check. Ben confirmed a fresh real command now replies that Minecraft is paused.
 -   Verified immediate cause: the approved LaunchAgent is unloaded following Ben's explicit temporary disconnect. No Discord process exists to acknowledge commands. The existing networth handler already defers before roster/API waits.
 -   Preserve the current Minecraft pause. Add an explicit MINECRAFT_ENABLED switch (default true); false keeps Discord and its commands online without creating a Minecraft client. Do not reconnect the account until Ben requests it. Keep AFK enabled for later resumption.
 -   Add a small local health snapshot/check covering Discord readiness, intentional pause versus connection failure, AFK, and leaderboard freshness. Never expose credentials/player inventories, send test messages, decide applications, or kick players.
 -   Existing membership validation stays strict: disconnected commands respond clearly; no stale roster is used to fabricate a current guild ranking.
--   Owner configures the native two-hour thread heartbeat, performs final verification, commits and pushes only scoped changes as NumberSixDev, then starts the established service in Discord-only mode. No new service, sleep changes, billing changes or GitHub CI enablement.
+-   Source ec3c0fccf04a06c5cb9a34e0e996be1534086601 is committed and pushed as NumberSixDev to origin feat/dragsim-guild-chat. The established LaunchAgent now runs that build in Discord-only mode. No new service, sleep changes, billing changes or GitHub CI enablement.
 
 ## Verification and remaining work
 
 -   Branch feat/dragsim-guild-chat; clean checkout; one fetch confirms origin and HEAD match. Preserve origin NumberSixDev/bridge and upstream MiscGuild/bridge.
 -   Native thread heartbeat `check-dragsim-guild-bridge` created and read back ACTIVE every two hours, with failed-run notifications. It respects intentional pause/full-shutdown state and permits only bounded in-scope repairs through the established service.
--   Read-only live checks: Discord still registers all9 commands including gleaderboard/networth; official player plus matching networth API returned usable numeric evidence in1.95 seconds (partial valuation is normal).
--   Pending: bounded implementation, regression/build/format/config checks, real Discord-only readiness and paused command-path validation, commit/push verification.
+-   Read-only live checks: Discord registers all 9 commands including gleaderboard/networth; official player plus matching networth API returned usable numeric evidence in 1.95 seconds (partial valuation is normal).
+-   Build and all 129 offline tests, formatting/lint, configuration, diff checks and lookup benchmark passed. Four searches reused three requests at maximum concurrency 2; median 62.88ms with simulated 30ms API latency. Ten pause/reconnection tests also passed with the actual local pause flag set.
+-   Live LaunchAgent PID 69375 passes `pnpm check-health --pid 69375`: Discord ready with 9 commands, Minecraft intentionally paused. Fresh startup log confirms that mode; no new error output or Minecraft socket. Local MINECRAFT_ENABLED=false; existing MINECRAFT_AFK_ENABLED=true remains dormant until Ben requests reconnection. Never infer reconnect authority from a scheduled health check.
+-   Real router regression tests prove paused networth/refresh commands acknowledge and return the pause message without Minecraft or API calls; scope fallbacks also respond privately. Ben confirmed the real Discord command says the Minecraft connection is paused. Actual rankings require a later authorised reconnection. No agent posted test messages, operated Discord UI or initiated membership changes.
 
 # Recruitment request expiry, 15 November 2026
 
