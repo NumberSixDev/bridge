@@ -1,10 +1,19 @@
+# Minecraft bridge resumed, 18 November 2026
+
+-   Ben's request to get the bridge working supersedes the previous temporary Minecraft pause. The cause was the intentional local MINECRAFT_ENABLED=false setting; Discord itself was healthy and responding.
+-   Restored MINECRAFT_ENABLED=true, preserving MINECRAFT_AFK_ENABLED=true, and restarted only the established LaunchAgent. PID 92962 connected as LabGeek2, verified 125 guild members across 6 ranks and opened the AFK Rewards menu. No second account connection, sleep/startup change or application/purge decision was made.
+-   Source remains ec3c0fc (documentation HEAD before this record bf70aca); no code fix was needed. Configuration validation and the build/all 129 offline tests passed. The feature branch was clean and matched origin before this operational record.
+-   VERIFIED LIVE: the cold refresh completed in 162 seconds with usable profile/networth data for 124 of 125 verified members; one member remains unavailable rather than being counted as zero. A read-only local render of the production cache produced five networth pages with valid embed length and navigation. `pnpm check-health --pid 92962` passes for Discord, Minecraft, roster, cache and active AFK. All 9 commands, including gleaderboard/networth, are registered; the relay channel matches the configured guild. No new connection errors appeared.
+-   Build/all 129 tests, formatting/lint and configuration checks passed. No source change or extra API scan was necessary. Ben was asked to send one relay test in each direction; that new user-side relay confirmation is pending, distinct from the live connection/cache proof.
+-   The two-hour monitor must now expect Minecraft and AFK online unless Ben gives a later pause instruction. Earlier Discord-only verification below is historical, not the current desired state.
+
 # Discord command availability and two-hour health checks, 18 November 2026
 
 ## Goal and decisions
 
 -   RELEASED AND USER-VERIFIED. Repaired Discord command non-response, especially /gleaderboard networth, and created a two-hour scheduled health check. Ben confirmed a fresh real command now replies that Minecraft is paused.
--   Verified immediate cause: the approved LaunchAgent is unloaded following Ben's explicit temporary disconnect. No Discord process exists to acknowledge commands. The existing networth handler already defers before roster/API waits.
--   Preserve the current Minecraft pause. Add an explicit MINECRAFT_ENABLED switch (default true); false keeps Discord and its commands online without creating a Minecraft client. Do not reconnect the account until Ben requests it. Keep AFK enabled for later resumption.
+-   Verified immediate cause at the time: the approved LaunchAgent was unloaded following Ben's explicit temporary disconnect. No Discord process existed to acknowledge commands. The existing networth handler already defers before roster/API waits.
+-   Added an explicit MINECRAFT_ENABLED switch (default true); false keeps Discord and its commands online without creating a Minecraft client. The initial rollout preserved the pause; Ben's later request to restore the bridge supersedes it as recorded above.
 -   Add a small local health snapshot/check covering Discord readiness, intentional pause versus connection failure, AFK, and leaderboard freshness. Never expose credentials/player inventories, send test messages, decide applications, or kick players.
 -   Existing membership validation stays strict: disconnected commands respond clearly; no stale roster is used to fabricate a current guild ranking.
 -   Source ec3c0fccf04a06c5cb9a34e0e996be1534086601 is committed and pushed as NumberSixDev to origin feat/dragsim-guild-chat. The established LaunchAgent now runs that build in Discord-only mode. No new service, sleep changes, billing changes or GitHub CI enablement.
