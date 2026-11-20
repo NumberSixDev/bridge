@@ -1,3 +1,13 @@
+# Login readiness repair, 20 November 2026
+
+-   IN PROGRESS. Ben explicitly requests continued repair until Minecraft and AFK are restored. Latest desired state is online; both local flags are true.
+-   Confirmed local cause: after the proxy restart the bot enters the actual Minestom game with guild join notice, players and scoreboard, but `/warp hub` is a position-only transfer. The installed Mineflayer emits no second spawn without a respawn/health transition. The old 15-second second-spawn gate closes a valid game connection. Repeated logins also encounter HTTP 429.
+-   Approved correction: keep the normal join command and protocol version; prove readiness with a fresh complete counted guild roster containing the bot, only on the current client in protocol play state. Bound the startup probe, retry temporary transition/no-response states, clean listeners/timers on readiness, disconnect or stop, and never mark login/position alone as ready. Respect authentication rate limits with a longer bounded cooldown.
+-   Acceptance: regression tests for same-world entry without a second spawn, normal transfer, incomplete/foreign roster, configuration-state race, old-client/stop cleanup and HTTP 429; full project checks; commit/push as NumberSixDev; deploy through the one existing LaunchAgent and verify a fresh roster, active AFK, Discord and completed cache refresh. No real application decisions, purge or test messages.
+-   IMPLEMENTED LOCALLY: roster-based readiness and five-minute authentication rate-limit cooldown. Build/all 133 offline tests, format/lint, configuration and whitespace checks passed. Offline lookup benchmark retains 4 searches coalesced into 3 API lookups, max concurrency 2, median 63.96ms with simulated 30ms latency. Live deployment/verification remains pending.
+-   During implementation only, stopped Minecraft attempts in the existing process at 11:17 GMT to allow authentication rate-limit cooldown; Discord remains online and both .env flags stay true. Deploy/restart the repaired service to resume Minecraft before completion.
+-   The earlier controlled restart produced PID 19396 and did not fix the defect. Temporary diagnostic listeners were removed and loopback inspector closed. Existing branch and origin both at d318157; working tree was clean before this scoped repair.
+
 # Minecraft bridge resumed, 18 November 2026
 
 -   Ben's request to get the bridge working supersedes the previous temporary Minecraft pause. The cause was the intentional local MINECRAFT_ENABLED=false setting; Discord itself was healthy and responding.

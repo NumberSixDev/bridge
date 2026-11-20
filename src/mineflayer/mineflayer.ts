@@ -6,11 +6,36 @@ import loadEvents from '@util/load-events';
 import { guildCommand, singleLine } from '@util/guild-chat';
 import minecraftPausedMessage from '@util/minecraft-paused';
 import Bridge from '../bridge';
+import { GuildRosterCollector } from '../leaderboard/roster';
 import AfkKeeper from './afk';
 
 const CONNECTION_TIMEOUT_MS = 60_000;
+const JOIN_DELAY_MS = 2_000;
+const READINESS_TIMEOUT_MS = 30_000;
+const READINESS_PROBE_TIMEOUT_MS = 5_000;
+const READINESS_PROBE_DELAY_MS = 2_000;
 const RETRY_BASE_MS = 5_000;
 const RETRY_MAX_MS = 60_000;
+const AUTH_RATE_LIMIT_RETRY_MS = 5 * 60_000;
+const AUTH_RATE_LIMIT_REASON = 'authentication rate limit (HTTP 429)';
+const AUTH_RATE_LIMIT_MESSAGE = /\bStatus code:\s*429\b/i;
+
+function isRateLimitError(error: unknown) {
+    if (typeof error === 'object' && error !== null) {
+        if (
+            ('status' in error && error.status === 429) ||
+            ('statusCode' in error && error.statusCode === 429)
+        ) {
+            return true;
+        }
+        return (
+            'message' in error &&
+            typeof error.message === 'string' &&
+            AUTH_RATE_LIMIT_MESSAGE.test(error.message)
+        );
+    }
+    return typeof error === 'string' && AUTH_RATE_LIMIT_MESSAGE.test(error);
+}
 
 export default class Mineflayer {
     private bot?: Bot;
@@ -19,6 +44,7 @@ export default class Mineflayer {
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
     private joinTimer?: NodeJS.Timeout;
+    private stopReadinessProbe?: () => void;
     private afk?: AfkKeeper;
     private connectionTimer?: NodeJS.Timeout;
     private retryAttempt = 0;
@@ -61,8 +87,11 @@ export default class Mineflayer {
                 hideErrors: true,
             });
         } catch (error) {
-            winston.error('Minecraft client creation failed:', error);
-            this.scheduleReconnect(bridge);
+            const rateLimited = isRateLimitError(error);
+            if (rateLimited)
+                winston.warn(`Minecraft client creation failed (${AUTH_RATE_LIMIT_REASON}).`);
+            else winston.error('Minecraft client creation failed:', error);
+            this.scheduleReconnect(bridge, rateLimited);
             return;
         }
         this.bot = bot;
@@ -93,8 +122,16 @@ export default class Mineflayer {
         });
         bot.on('error', (error) => {
             if (this.bot !== bot) return;
-            winston.error('Minecraft connection error:', error);
-            this.recoverConnection(bot, bridge, 'connection error');
+            const rateLimited = isRateLimitError(error);
+            if (!rateLimited) winston.error('Minecraft connection error:', error);
+            this.recoverConnection(
+                bot,
+                bridge,
+                rateLimited ? AUTH_RATE_LIMIT_REASON : 'connection error',
+                {
+                    rateLimited,
+                }
+            );
         });
         bot.on('kicked', (reason) => {
             if (this.bot !== bot) return;
@@ -106,7 +143,7 @@ export default class Mineflayer {
             this.recoverConnection(bot, bridge, 'server kick');
         });
         bot.on('end', (reason) => {
-            this.recoverConnection(bot, bridge, reason, false);
+            this.recoverConnection(bot, bridge, reason, { close: false });
         });
         // Mineflayer's chat plugin is available after the first spawn.
         bot.once('spawn', () => {
@@ -118,7 +155,12 @@ export default class Mineflayer {
         });
     }
 
-    private recoverConnection(bot: Bot, bridge: Bridge, reason: string, close = true) {
+    private recoverConnection(
+        bot: Bot,
+        bridge: Bridge,
+        reason: string,
+        { close = true, rateLimited = false } = {}
+    ) {
         if (this.bot !== bot) return;
         this.bot = undefined;
         this.readyAt = undefined;
@@ -138,12 +180,14 @@ export default class Mineflayer {
             bot._client.socket?.destroy();
         }
         if (!this.stopping) winston.warn(`Minecraft connection retired (${reason}).`);
-        this.scheduleReconnect(bridge);
+        this.scheduleReconnect(bridge, rateLimited);
     }
 
-    private scheduleReconnect(bridge: Bridge) {
+    private scheduleReconnect(bridge: Bridge, rateLimited = false) {
         if (this.stopping || this.reconnectTimer || this.bot) return;
-        const delay = Math.min(RETRY_BASE_MS * 2 ** Math.min(this.retryAttempt, 4), RETRY_MAX_MS);
+        const delay = rateLimited
+            ? AUTH_RATE_LIMIT_RETRY_MS
+            : Math.min(RETRY_BASE_MS * 2 ** Math.min(this.retryAttempt, 4), RETRY_MAX_MS);
         this.retryAttempt += 1;
         winston.warn(`Retrying Minecraft connection in ${delay / 1_000} seconds.`);
         this.reconnectTimer = setTimeout(() => {
@@ -160,6 +204,8 @@ export default class Mineflayer {
         clearTimeout(this.connectionTimer);
         clearTimeout(this.joinTimer);
         clearInterval(this.reminderTimer);
+        this.stopReadinessProbe?.();
+        this.stopReadinessProbe = undefined;
         this.connectionTimer = undefined;
         this.joinTimer = undefined;
         this.reminderTimer = undefined;
@@ -172,35 +218,87 @@ export default class Mineflayer {
             bridge.leaderboard?.handleMinecraftMessage(message)
         );
         bot.on('messagestr', (message: string) => bridge.purge?.handleMinecraftMessage(message));
-        if (env.MINECRAFT_JOIN_COMMAND) {
-            // Let DragSim finish its initial profile-selector transfer first.
-            this.joinTimer = setTimeout(() => {
-                if (this.bot !== bot || this.stopping) return;
-                bot.once('spawn', () => {
-                    if (this.bot !== bot || this.stopping) return;
-                    clearTimeout(this.joinTimer);
-                    this.onReady(bot, bridge).catch((error: unknown) => {
-                        winston.error('Minecraft hub setup failed:', error);
-                        this.recoverConnection(bot, bridge, 'Minecraft hub setup failed');
-                    });
-                });
-                this.joinTimer = setTimeout(() => {
-                    this.recoverConnection(bot, bridge, 'Hub transfer timed out');
-                }, 15_000);
-                try {
-                    bot.chat(env.MINECRAFT_JOIN_COMMAND);
-                } catch (error) {
-                    winston.error('Minecraft join command failed:', error);
-                    this.recoverConnection(bot, bridge, 'Join command failed');
-                }
-            }, 2_000);
+        const joinCommand = env.MINECRAFT_JOIN_COMMAND;
+        if (!joinCommand) {
+            await this.onReady(bot, bridge);
             return;
         }
-        await this.onReady(bot, bridge);
+        // Let DragSim finish its initial profile-selector transfer first.
+        this.joinTimer = setTimeout(() => {
+            if (this.bot !== bot || this.stopping) return;
+            this.joinTimer = undefined;
+            try {
+                bot.chat(joinCommand);
+            } catch (error) {
+                winston.error('Minecraft join command failed:', error);
+                this.recoverConnection(bot, bridge, 'Join command failed');
+                return;
+            }
+            if (this.bot === bot && !this.stopping) this.startReadinessProbe(bot, bridge);
+        }, JOIN_DELAY_MS);
+    }
+
+    private startReadinessProbe(bot: Bot, bridge: Bridge) {
+        let stopped = false;
+        let probeTimer: NodeJS.Timeout | undefined;
+        let playGeneration = 0;
+        const isInPlay = () =>
+            !stopped && this.bot === bot && !this.stopping && bot._client.state === 'play';
+        const collector = new GuildRosterCollector({
+            isMinecraftReady: isInPlay,
+            sendCommand: (command) => bot.chat(command),
+            timeoutMs: READINESS_PROBE_TIMEOUT_MS,
+        });
+        const onMessage = (message: string) => {
+            if (isInPlay()) collector.handleMessage(message);
+        };
+        const onProtocolState = (state: string) => {
+            if (state === 'play') return;
+            playGeneration += 1;
+            collector.disconnected();
+        };
+        const deadline = setTimeout(() => {
+            if (!stopped)
+                this.recoverConnection(bot, bridge, 'Minecraft guild readiness timed out');
+        }, READINESS_TIMEOUT_MS);
+        this.stopReadinessProbe = () => {
+            stopped = true;
+            clearTimeout(probeTimer);
+            clearTimeout(deadline);
+            bot.off('messagestr', onMessage);
+            bot._client.off('state', onProtocolState);
+            collector.stop();
+        };
+        const probe = async () => {
+            if (isInPlay()) {
+                const generation = playGeneration;
+                const roster = await collector.getRoster(true).catch(() => undefined);
+                const username = bot.username?.toLowerCase();
+                if (
+                    isInPlay() &&
+                    generation === playGeneration &&
+                    roster?.members.some((member) => member.toLowerCase() === username)
+                ) {
+                    try {
+                        await this.onReady(bot, bridge);
+                    } catch (error) {
+                        winston.error('Minecraft hub setup failed:', error);
+                        this.recoverConnection(bot, bridge, 'Minecraft hub setup failed');
+                    }
+                    return;
+                }
+            }
+            if (!stopped) probeTimer = setTimeout(probe, READINESS_PROBE_DELAY_MS);
+        };
+        // A same-world hub warp can move the bot without another spawn. A fresh
+        // roster proves the account has reached a world that serves guild commands.
+        bot.on('messagestr', onMessage);
+        bot._client.on('state', onProtocolState);
+        probeTimer = setTimeout(probe, READINESS_PROBE_DELAY_MS);
     }
 
     private async onReady(bot: Bot, bridge: Bridge) {
-        if (this.bot !== bot || this.stopping) return;
+        if (this.bot !== bot || this.stopping || this.readyAt !== undefined) return;
         this.clearConnectionTimers();
         this.retryAttempt = 0;
         this.readyAt = Date.now();

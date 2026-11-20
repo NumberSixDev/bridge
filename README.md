@@ -6,7 +6,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 ## Behaviour
 
 -   Connects to `dragsim.co` using a Minecraft Java account and Microsoft sign-in.
--   Acknowledges the server resource pack and uses `/warp hub` to leave the profile selector before enabling guild chat.
+-   Acknowledges the server resource pack, sends `/warp hub`, and verifies a fresh complete guild list containing the bot before enabling guild chat. A same-world warp does not need to emit another spawn event.
 -   Optionally keeps `/afk` rewards active, restoring the AFK menu after closure, reconnect or lobby transfer.
 -   Sends Discord messages as `/gc DisplayName > message`.
 -   Recognises guild messages with optional server-rank prefixes and guild-role suffixes, such as `Guild > [MOD] DragSim [GM]: hello`, as well as unranked players. Any bracketed tags are supported, including multiple tags together.
@@ -17,7 +17,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 -   Does not relay public Minecraft chat, officer chat, private messages or unrecognised guild announcements.
 -   Disables Discord mention notifications in relayed messages.
 -   Rejects messages exceeding Minecraft's 256-character limit, including `/gc `, the author and separator.
--   Retries disconnects, login failures and stalled setup automatically, and supports optional guild reminders.
+-   Retries disconnects, login failures and stalled setup automatically, with a five-minute cooldown for authentication rate limits, and supports optional guild reminders.
 -   Records guild join applications with profile summaries and persistent Accept/Deny controls.
 -   Supports a persistent recruitment settings panel with optional thresholded automatic acceptance.
 -   Provides public `/gleaderboard` rankings for current Minecraft guild members with paginated buttons.

@@ -385,29 +385,29 @@ test('configuration requires credentials and valid single-guild IDs and chat com
     );
 });
 
-test('guild chat waits for the configured hub transfer after the first spawn', async () => {
+test('guild chat waits for verified membership after the configured hub transfer', async () => {
     const { EventEmitter } = require('node:events');
     const runtimeEnv = require('../dist/src/util/env.js').default;
     const originalJoinCommand = runtimeEnv.MINECRAFT_JOIN_COMMAND;
     const originalSetTimeout = global.setTimeout;
     const originalClearTimeout = global.clearTimeout;
     let joinCallback;
+    let probeCallback;
     let joinScheduled;
-    let ready;
     let watchdogCleared = false;
     const scheduled = new Promise((resolve) => {
         joinScheduled = resolve;
     });
-    const connected = new Promise((resolve) => {
-        ready = resolve;
-    });
     global.setTimeout = (callback, delay, ...args) => {
         if (delay === 2_000) {
-            joinCallback = callback;
-            joinScheduled();
+            if (joinCallback) probeCallback = callback;
+            else {
+                joinCallback = callback;
+                joinScheduled();
+            }
             return { joinDelay: true };
         }
-        if (delay === 15_000) return { joinWatchdog: true };
+        if (delay === 30_000) return { joinWatchdog: true };
         return originalSetTimeout(callback, delay, ...args);
     };
     global.clearTimeout = (timer) => {
@@ -417,6 +417,7 @@ test('guild chat waits for the configured hub transfer after the first spawn', a
     runtimeEnv.MINECRAFT_JOIN_COMMAND = '/warp hub';
     const bot = new EventEmitter();
     bot._client = new EventEmitter();
+    bot._client.state = 'play';
     bot.username = 'LabGeek2';
     bot.addChatPattern = () => {};
     bot.quit = () => {};
@@ -424,18 +425,24 @@ test('guild chat waits for the configured hub transfer after the first spawn', a
     bot.chat = (text) => chats.push(text);
     const mineflayer = new Mineflayer(() => bot);
     try {
-        await mineflayer.connect({ discord: { send: async () => ready() }, stop() {} });
+        await mineflayer.connect({ discord: { send: async () => {} }, stop() {} });
         bot.emit('spawn');
         await scheduled;
         assert.throws(() => mineflayer.chat('too early'), /not connected yet/);
         joinCallback();
         assert.deepEqual(chats, ['/warp hub']);
         assert.throws(() => mineflayer.chat('still transferring'), /not connected yet/);
-        bot.emit('spawn');
-        await connected;
+        const probe = probeCallback();
+        assert.deepEqual(chats, ['/warp hub', '/g list']);
+        assert.throws(() => mineflayer.chat('awaiting guild roster'), /not connected yet/);
+        bot.emit(
+            'messagestr',
+            'Guild Name: Test (1/2 online)\nGuild Master [1] Owner\nMember [1] LabGeek2'
+        );
+        await probe;
         assert.equal(watchdogCleared, true);
         mineflayer.chat('ready');
-        assert.deepEqual(chats, ['/warp hub', '/gc ready']);
+        assert.deepEqual(chats, ['/warp hub', '/g list', '/gc ready']);
     } finally {
         mineflayer.stop();
         runtimeEnv.MINECRAFT_JOIN_COMMAND = originalJoinCommand;
