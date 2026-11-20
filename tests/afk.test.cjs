@@ -1,7 +1,11 @@
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const { EventEmitter } = require('node:events');
-const { default: AfkKeeper, isAfkWindow } = require('../dist/src/mineflayer/afk.js');
+const {
+    default: AfkKeeper,
+    isAfkWindow,
+    isDragSimProfileWindow,
+} = require('../dist/src/mineflayer/afk.js');
 
 function afkWindow(time = '14:59') {
     return {
@@ -68,6 +72,28 @@ test('AFK menu recognition supports observed NBT and plain/JSON titles only', ()
     for (const title of ['Other AFK Rewards', 'Profile Selector', '{broken', null, { text: [] }])
         assert.equal(isAfkWindow({ title }), false);
     assert.equal(isAfkWindow(null), false);
+});
+
+test('profile menu recognition matches the DragSim title in NBT and plain/JSON forms', () => {
+    const title = 'DragSim » Choose Profile';
+    for (const window of [
+        { title },
+        { title: `§a${title}` },
+        { title: JSON.stringify({ text: title }) },
+        { title: { type: 'compound', value: { text: { type: 'string', value: title } } } },
+    ]) {
+        assert.equal(isDragSimProfileWindow(window), true);
+        assert.equal(isAfkWindow(window), false);
+    }
+    for (const window of [
+        afkWindow(),
+        { title: 'Other » Choose Profile' },
+        { title: `${title} Settings` },
+        { title: '{broken' },
+        null,
+    ]) {
+        assert.equal(isDragSimProfileWindow(window), false);
+    }
 });
 
 test('AFK starts once after settling and preserves an open reward timer indefinitely', () => {

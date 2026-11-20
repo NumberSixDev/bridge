@@ -19,11 +19,14 @@ function harness({
     creationFailures = 0,
     creationError = Error('Client creation failed'),
     joinCommand = '',
+    afkEnabled = false,
 } = {}) {
     const originalSetTimeout = global.setTimeout;
     const originalClearTimeout = global.clearTimeout;
     const previousJoinCommand = runtimeEnv.MINECRAFT_JOIN_COMMAND;
+    const previousAfkEnabled = runtimeEnv.MINECRAFT_AFK_ENABLED;
     runtimeEnv.MINECRAFT_JOIN_COMMAND = joinCommand;
+    runtimeEnv.MINECRAFT_AFK_ENABLED = afkEnabled;
     const timers = new Set();
     let joinScheduled;
     global.setTimeout = (callback, delay) => {
@@ -34,16 +37,23 @@ function harness({
     };
     global.clearTimeout = (timer) => timers.delete(timer);
     const clients = [];
-    const events = { attempts: 0, leaderboardDisconnects: 0, purgeDisconnects: 0, ready: 0 };
+    const events = {
+        attempts: 0,
+        leaderboardReadies: 0,
+        leaderboardDisconnects: 0,
+        purgeReadies: 0,
+        purgeDisconnects: 0,
+        ready: 0,
+    };
     const bridge = {
         leaderboard: {
             onMinecraftDisconnected: () => events.leaderboardDisconnects++,
-            onMinecraftReady: async () => {},
+            onMinecraftReady: async () => events.leaderboardReadies++,
             handleMinecraftMessage: () => {},
         },
         purge: {
             onMinecraftDisconnected: () => events.purgeDisconnects++,
-            onMinecraftReady: async () => {},
+            onMinecraftReady: async () => events.purgeReadies++,
             handleMinecraftMessage: () => {},
         },
         discord: { send: async () => events.ready++ },
@@ -65,6 +75,11 @@ function harness({
         bot.username = 'TestBot';
         bot.options = options;
         bot.commands = [];
+        bot.currentWindow = null;
+        bot.openWindow = (window) => {
+            bot.currentWindow = window;
+            bot.emit('windowOpen', window);
+        };
         bot.chat = (text) => bot.commands.push(text);
         bot.addChatPattern = () => {};
         // Reproduce the incident: before a socket exists end() emits nothing.
@@ -103,12 +118,26 @@ function harness({
         global.setTimeout = originalSetTimeout;
         global.clearTimeout = originalClearTimeout;
         runtimeEnv.MINECRAFT_JOIN_COMMAND = previousJoinCommand;
+        runtimeEnv.MINECRAFT_AFK_ENABLED = previousAfkEnabled;
     }
     return { service, bridge, clients, events, timers, timer, fire, startJoin, close };
 }
 
 const roster = (member = 'tEsTbOt') =>
     `Guild Name: Test (1/2 online)\nGuild Master [1] Owner\nMember [1] ${member}`;
+
+const profileWindow = {
+    title: {
+        type: 'compound',
+        value: { text: { type: 'string', value: 'DragSim » Choose Profile' } },
+    },
+};
+
+async function finishJoin(h, bot) {
+    const probe = h.fire(2_000);
+    bot.emit('messagestr', roster());
+    await probe;
+}
 
 test('pre-socket authentication errors retry without needing an end event, once per attempt', async () => {
     const h = harness();
@@ -337,6 +366,135 @@ test('stop clears a pending readiness probe and ignores its late response', asyn
         assert.equal(bot.listenerCount('messagestr'), 2);
         assert.equal(bot._client.listenerCount('state'), 0);
         assert.equal(bot.endReason, undefined);
+    } finally {
+        h.close();
+    }
+});
+
+test('a ready bot leaving AFK for profile selection rejoins and verifies guild membership on the same client', async () => {
+    const h = harness({ joinCommand: '/warp hub', afkEnabled: true });
+    try {
+        await h.service.connect(h.bridge);
+        const bot = await h.startJoin();
+        await finishJoin(h, bot);
+        await h.fire(2_000);
+        bot.openWindow({ title: 'AFK Rewards · 14:59' });
+        assert.equal(h.service.isAfkActive, true);
+        assert.equal(h.service.isReady, true);
+        assert.equal(h.events.leaderboardDisconnects, 0);
+        assert.equal(h.events.purgeDisconnects, 0);
+        assert.equal(bot.listenerCount('windowOpen'), 2);
+
+        // A window event can arrive after the server has already replaced it.
+        bot.emit('windowOpen', profileWindow);
+        assert.equal(h.service.isReady, true);
+        bot.openWindow(profileWindow);
+        bot.openWindow(profileWindow);
+        assert.equal(h.service.isReady, false);
+        assert.equal(h.service.isAfkActive, false);
+        assert.equal(h.service.afk, undefined);
+        assert.equal(h.service.connectedAt, null);
+        assert.equal(h.events.leaderboardDisconnects, 1);
+        assert.equal(h.events.purgeDisconnects, 1);
+        assert.equal(bot.listenerCount('windowOpen'), 1);
+        assert.equal(bot.listenerCount('windowClose'), 0);
+        assert.equal(h.timers.size, 1);
+        assert.throws(() => h.service.chat('still transferring'), /not connected yet/);
+
+        await h.fire(2_000);
+        bot.openWindow(profileWindow);
+        bot.currentWindow = null;
+        const recovery = h.fire(2_000);
+        assert.equal(h.service.isReady, false);
+        assert.deepEqual(bot.commands, ['/warp hub', '/g list', '/afk', '/warp hub', '/g list']);
+        bot.emit('messagestr', roster());
+        await recovery;
+        assert.equal(h.service.isReady, true);
+        assert.equal(h.service.bot, bot);
+        assert.equal(h.events.attempts, 1);
+        assert.equal(h.events.leaderboardReadies, 2);
+        assert.equal(h.events.purgeReadies, 2);
+        assert.equal(h.events.ready, 2);
+        assert.equal(bot.listenerCount('messagestr'), 2);
+        assert.equal(bot.listenerCount('windowOpen'), 2);
+        await h.fire(2_000);
+        assert.equal(bot.commands.at(-1), '/afk');
+        bot.openWindow({ title: 'AFK Rewards · 14:59' });
+        assert.equal(h.service.isAfkActive, true);
+    } finally {
+        h.close();
+    }
+});
+
+test('a previous ready continuation cannot start services again after same-client profile recovery', async () => {
+    const h = harness({ joinCommand: '/warp hub' });
+    try {
+        let startLeaderboard;
+        let finishLeaderboard;
+        const started = new Promise((resolve) => {
+            startLeaderboard = resolve;
+        });
+        const pending = new Promise((resolve) => {
+            finishLeaderboard = resolve;
+        });
+        h.bridge.leaderboard.onMinecraftReady = async () => {
+            h.events.leaderboardReadies += 1;
+            if (h.events.leaderboardReadies === 1) {
+                startLeaderboard();
+                await pending;
+            }
+        };
+        await h.service.connect(h.bridge);
+        const bot = await h.startJoin();
+        const first = finishJoin(h, bot);
+        await started;
+        assert.equal(h.service.isReady, true);
+        assert.equal(h.events.ready, 0);
+
+        bot.openWindow(profileWindow);
+        await h.fire(2_000);
+        bot.currentWindow = null;
+        await finishJoin(h, bot);
+        finishLeaderboard();
+        await first;
+        assert.equal(h.service.isReady, true);
+        assert.equal(h.events.leaderboardReadies, 2);
+        assert.equal(h.events.purgeReadies, 1);
+        assert.equal(h.events.ready, 1);
+    } finally {
+        h.close();
+    }
+});
+
+test('failed profile recovery reconnects and old or stopped window listeners cannot trigger setup', async () => {
+    const h = harness({ joinCommand: '/warp hub' });
+    try {
+        await h.service.connect(h.bridge);
+        const retired = await h.startJoin();
+        await finishJoin(h, retired);
+        const oldWatcher = retired.listeners('windowOpen')[0];
+        retired.openWindow(profileWindow);
+        await h.fire(2_000);
+        const recovery = h.fire(2_000);
+        await h.fire(30_000);
+        await recovery;
+        assert.match(retired.endReason, /guild readiness timed out/);
+        assert.equal(retired.listenerCount('windowOpen'), 0);
+
+        await h.fire(5_000);
+        const current = await h.startJoin();
+        await finishJoin(h, current);
+        oldWatcher(profileWindow);
+        assert.equal(h.service.isReady, true);
+        assert.equal(h.timers.size, 0);
+
+        const currentWatcher = current.listeners('windowOpen')[0];
+        h.service.stop();
+        current.currentWindow = profileWindow;
+        currentWatcher(profileWindow);
+        assert.equal(current.listenerCount('windowOpen'), 0);
+        assert.equal(h.timers.size, 0);
+        assert.equal(h.events.ready, 2);
     } finally {
         h.close();
     }

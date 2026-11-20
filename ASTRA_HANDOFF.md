@@ -1,3 +1,11 @@
+# Recovery after returning to profile selection, 20 November 2026
+
+-   IMPLEMENTED AND LOCALLY VERIFIED during the 21:00 scheduled check; deployment and live re-entry pending. Desired state remains Minecraft and AFK online. Existing service PID 24202, both flags true, no additional restart performed in this incident yet.
+-   Observed the live client in protocol play state with NBT title `DragSim » Choose Profile`, while its readiness flag remained true and /afk retries and guild-list requests were ineffective. The client subsequently timed out. New login attempts explicitly receive server kicks saying the hub has an internal server connection error; external hub availability is separate from the local readiness defect.
+-   Implemented correction: detect only the confirmed profile-selection window on a ready current client, invalidate readiness and AFK/roster/purge lifecycle, then reuse the existing join plus verified-roster startup path on that connection. No duplicate chat handlers, speculative teleport readiness or extra account session. Bounded recovery rejects stale/stopped callbacks, including asynchronous setup from a previous readiness generation on the same client.
+-   Build/all 137 offline tests, formatting/lint, configuration and whitespace checks pass. Regressions cover NBT/plain/JSON titles, active AFK to profile selection, same-client recovery, pending service setup, duplicate/old windows, stop cleanup and timeout reconnect. Four benchmark searches reuse three API requests at maximum concurrency two (62.32ms median with simulated 30ms latency). The first owner suite overlapped a worker build clean and found missing dist files; the final serial build/full suite passes.
+-   Remaining: scoped commit/push as NumberSixDev, established-service deployment, and live readiness/AFK/cache verification if the server accepts entry. Do not claim local code fixes server downtime or send external test messages/membership actions.
+
 # Same-world login readiness repair, 20 November 2026
 
 -   COMPLETE, PUSHED AND VERIFIED LIVE. Ben requests Minecraft connected with 24/7 AFK; both local flags remain true. Source 0222d792d2d46468a2e0cc7330b3502e8cc7ad64 is pushed as NumberSixDev to origin feat/dragsim-guild-chat and deployed through the existing Mac LaunchAgent, PID 24202.

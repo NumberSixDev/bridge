@@ -7,7 +7,7 @@ import { guildCommand, singleLine } from '@util/guild-chat';
 import minecraftPausedMessage from '@util/minecraft-paused';
 import Bridge from '../bridge';
 import { GuildRosterCollector } from '../leaderboard/roster';
-import AfkKeeper from './afk';
+import AfkKeeper, { isDragSimProfileWindow } from './afk';
 
 const CONNECTION_TIMEOUT_MS = 60_000;
 const JOIN_DELAY_MS = 2_000;
@@ -39,12 +39,13 @@ function isRateLimitError(error: unknown) {
 
 export default class Mineflayer {
     private bot?: Bot;
-    private readyAt?: number;
+    private readyState?: { connectedAt: number };
     private stopping = false;
     private reconnectTimer?: NodeJS.Timeout;
     private reminderTimer?: NodeJS.Timeout;
     private joinTimer?: NodeJS.Timeout;
     private stopReadinessProbe?: () => void;
+    private removeProfileWatcher?: () => void;
     private afk?: AfkKeeper;
     private connectionTimer?: NodeJS.Timeout;
     private retryAttempt = 0;
@@ -56,11 +57,11 @@ export default class Mineflayer {
     }
 
     public get isReady() {
-        return this.readyAt !== undefined && !this.stopping && Boolean(this.bot);
+        return Boolean(this.readyState && !this.stopping && this.bot);
     }
 
     public get connectedAt() {
-        return this.readyAt ?? null;
+        return this.readyState?.connectedAt ?? null;
     }
 
     public get isAfkActive() {
@@ -71,7 +72,7 @@ export default class Mineflayer {
         if (!env.MINECRAFT_ENABLED) throw new Error(minecraftPausedMessage);
         if (this.bot || this.reconnectTimer) return;
         this.stopping = false;
-        this.readyAt = undefined;
+        this.readyState = undefined;
         let bot: Bot;
         try {
             bot = this.createClient({
@@ -95,6 +96,32 @@ export default class Mineflayer {
             return;
         }
         this.bot = bot;
+        const onProfileWindow = (window: Bot['currentWindow']) => {
+            if (
+                this.bot !== bot ||
+                !this.isReady ||
+                window !== bot.currentWindow ||
+                !isDragSimProfileWindow(window)
+            ) {
+                return;
+            }
+            const joinCommand = env.MINECRAFT_JOIN_COMMAND;
+            if (!joinCommand) {
+                this.recoverConnection(
+                    bot,
+                    bridge,
+                    'DragSim profile selector requires a join command'
+                );
+                return;
+            }
+            this.clearReadyState(bridge);
+            winston.warn(
+                'DragSim returned the bot to profile selection; rejoining on the same connection.'
+            );
+            this.scheduleJoin(bot, bridge, joinCommand);
+        };
+        bot.on('windowOpen', onProfileWindow);
+        this.removeProfileWatcher = () => bot.off('windowOpen', onProfileWindow);
         // Authentication/DNS can finish after an attempt was retired. Refuse
         // its late socket so it cannot create a second account connection.
         const setSocket = bot._client.setSocket?.bind(bot._client);
@@ -163,12 +190,8 @@ export default class Mineflayer {
     ) {
         if (this.bot !== bot) return;
         this.bot = undefined;
-        this.readyAt = undefined;
-        this.clearConnectionTimers();
-        this.afk?.stop();
-        this.afk = undefined;
-        bridge.leaderboard?.onMinecraftDisconnected();
-        bridge.purge?.onMinecraftDisconnected();
+        this.clearProfileWatcher();
+        this.clearReadyState(bridge);
         // An authentication failure can have no socket and never emit 'end'.
         // Retire and retry independently of that event, exactly once per attempt.
         if (close) {
@@ -211,6 +234,20 @@ export default class Mineflayer {
         this.reminderTimer = undefined;
     }
 
+    private clearProfileWatcher() {
+        this.removeProfileWatcher?.();
+        this.removeProfileWatcher = undefined;
+    }
+
+    private clearReadyState(bridge?: Bridge) {
+        this.readyState = undefined;
+        this.clearConnectionTimers();
+        this.afk?.stop();
+        this.afk = undefined;
+        bridge?.leaderboard?.onMinecraftDisconnected();
+        bridge?.purge?.onMinecraftDisconnected();
+    }
+
     private async onSpawn(bot: Bot, bridge: Bridge) {
         await loadEvents(path.join(__dirname, 'events/chat'), bot, bridge);
         if (this.bot !== bot || this.stopping) return;
@@ -219,11 +256,12 @@ export default class Mineflayer {
         );
         bot.on('messagestr', (message: string) => bridge.purge?.handleMinecraftMessage(message));
         const joinCommand = env.MINECRAFT_JOIN_COMMAND;
-        if (!joinCommand) {
-            await this.onReady(bot, bridge);
-            return;
-        }
-        // Let DragSim finish its initial profile-selector transfer first.
+        if (joinCommand) this.scheduleJoin(bot, bridge, joinCommand);
+        else await this.onReady(bot, bridge);
+    }
+
+    private scheduleJoin(bot: Bot, bridge: Bridge, joinCommand: string) {
+        // Let the client settle before leaving DragSim's profile selector.
         this.joinTimer = setTimeout(() => {
             if (this.bot !== bot || this.stopping) return;
             this.joinTimer = undefined;
@@ -279,12 +317,7 @@ export default class Mineflayer {
                     generation === playGeneration &&
                     roster?.members.some((member) => member.toLowerCase() === username)
                 ) {
-                    try {
-                        await this.onReady(bot, bridge);
-                    } catch (error) {
-                        winston.error('Minecraft hub setup failed:', error);
-                        this.recoverConnection(bot, bridge, 'Minecraft hub setup failed');
-                    }
+                    await this.onReady(bot, bridge);
                     return;
                 }
             }
@@ -298,36 +331,45 @@ export default class Mineflayer {
     }
 
     private async onReady(bot: Bot, bridge: Bridge) {
-        if (this.bot !== bot || this.stopping || this.readyAt !== undefined) return;
+        if (this.bot !== bot || this.stopping || this.readyState) return;
         this.clearConnectionTimers();
         this.retryAttempt = 0;
-        this.readyAt = Date.now();
-        if (env.MINECRAFT_AFK_ENABLED) {
-            this.afk?.stop();
-            this.afk = new AfkKeeper({
-                bot,
-                isReady: () => this.bot === bot && this.isReady,
-                sendCommand: () => this.execute('/afk'),
-            });
-            this.afk.start();
-        }
-        winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
-        await bridge.recruitment?.onMinecraftReady();
-        if (this.bot !== bot || this.stopping) return;
-        await bridge.leaderboard?.onMinecraftReady();
-        if (this.bot !== bot || this.stopping) return;
-        await bridge.purge?.onMinecraftReady();
-        if (this.bot !== bot || this.stopping) return;
-        await bridge.discord.send('The DragSim guild bridge is connected.');
-        if (this.bot !== bot || this.stopping) return;
-        if (env.REMINDER_ENABLED) {
-            this.reminderTimer = setInterval(() => {
-                try {
-                    this.chat(env.REMINDER_MESSAGE);
-                } catch (error) {
-                    winston.warn('Reminder was not sent:', error);
-                }
-            }, env.REMINDER_FREQUENCY * 60_000);
+        const readyState = { connectedAt: Date.now() };
+        this.readyState = readyState;
+        // A profile-selector bounce can invalidate this setup without changing bots.
+        const isCurrent = () => this.readyState === readyState;
+        try {
+            if (env.MINECRAFT_AFK_ENABLED) {
+                this.afk?.stop();
+                this.afk = new AfkKeeper({
+                    bot,
+                    isReady: isCurrent,
+                    sendCommand: () => this.execute('/afk'),
+                });
+                this.afk.start();
+            }
+            winston.info(`Connected to ${env.MINECRAFT_HOST} as ${bot.username}.`);
+            await bridge.recruitment?.onMinecraftReady();
+            if (!isCurrent()) return;
+            await bridge.leaderboard?.onMinecraftReady();
+            if (!isCurrent()) return;
+            await bridge.purge?.onMinecraftReady();
+            if (!isCurrent()) return;
+            await bridge.discord.send('The DragSim guild bridge is connected.');
+            if (!isCurrent()) return;
+            if (env.REMINDER_ENABLED) {
+                this.reminderTimer = setInterval(() => {
+                    try {
+                        this.chat(env.REMINDER_MESSAGE);
+                    } catch (error) {
+                        winston.warn('Reminder was not sent:', error);
+                    }
+                }, env.REMINDER_FREQUENCY * 60_000);
+            }
+        } catch (error) {
+            if (!isCurrent()) return;
+            winston.error('Minecraft ready setup failed:', error);
+            this.recoverConnection(bot, bridge, 'Minecraft ready setup failed');
         }
     }
 
@@ -347,12 +389,10 @@ export default class Mineflayer {
 
     public stop() {
         this.stopping = true;
-        this.readyAt = undefined;
-        this.afk?.stop();
-        this.afk = undefined;
+        this.clearProfileWatcher();
+        this.clearReadyState();
         clearTimeout(this.reconnectTimer);
         this.reconnectTimer = undefined;
-        this.clearConnectionTimers();
         this.bot?.quit('Bridge stopped');
     }
 }

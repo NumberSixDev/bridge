@@ -26,11 +26,20 @@ function componentText(value: unknown, depth = 0): string {
     return componentText(component.text, depth + 1);
 }
 
-export function isAfkWindow(window: { title: unknown } | null | undefined) {
-    const title = componentText(window?.title)
+type TitledWindow = { title: unknown } | null | undefined;
+
+function windowTitleText(window: TitledWindow) {
+    return componentText(window?.title)
         .replace(/§[0-9a-fk-or]/gi, '')
         .trim();
-    return /^AFK Rewards(?:\s*·\s*\d{1,2}:\d{2})?$/u.test(title);
+}
+
+export function isAfkWindow(window: TitledWindow) {
+    return /^AFK Rewards(?:\s*·\s*\d{1,2}:\d{2})?$/u.test(windowTitleText(window));
+}
+
+export function isDragSimProfileWindow(window: TitledWindow) {
+    return windowTitleText(window) === 'DragSim » Choose Profile';
 }
 
 interface AfkOptions {

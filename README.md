@@ -7,6 +7,7 @@ Forked from [MiscGuild/bridge](https://github.com/MiscGuild/bridge), under the M
 
 -   Connects to `dragsim.co` using a Minecraft Java account and Microsoft sign-in.
 -   Acknowledges the server resource pack, sends `/warp hub`, and verifies a fresh complete guild list containing the bot before enabling guild chat. A same-world warp does not need to emit another spawn event.
+-   If DragSim returns the account to its profile selector, re-enters the game and verifies guild access again before accepting guild commands.
 -   Optionally keeps `/afk` rewards active, restoring the AFK menu after closure, reconnect or lobby transfer.
 -   Sends Discord messages as `/gc DisplayName > message`.
 -   Recognises guild messages with optional server-rank prefixes and guild-role suffixes, such as `Guild > [MOD] DragSim [GM]: hello`, as well as unranked players. Any bracketed tags are supported, including multiple tags together.
